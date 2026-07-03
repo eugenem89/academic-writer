@@ -316,6 +316,24 @@ Iterate until the researcher says something like "go", "looks good", or "start w
 
 
 
+### Step 5.5: Argument Graph Validation
+
+Before any section-writer is spawned, the orchestrator itself validates the approved outline's argument graph — the `id` / `claim` / `evidence` / `depends_on` / `thesis_link` / `argument_role` fields already captured during Step 5 approval, across every section AND every unit inside `units` arrays. This is not a subagent call; it is reasoning directly over the outline JSON already in memory. If a fix is needed, re-invoke the architect (Step 4/5 pattern) or ask the researcher via `AskUserQuestion`.
+
+Checklist — all four must pass:
+
+- **No orphan sections/units**: every node's claim must trace back to the thesis via `thesis_link` — either the node has its own `thesis_link` directly, or it `depends_on` a node that (transitively) does. Walk the `depends_on` chain from each node; flag any node where the chain never reaches a `thesis_link`.
+- **No circular `depends_on` references**: detect cycles in the `depends_on` graph (reason through it as a topological sort / DFS with a visited/in-progress marker over node `id`s — no node may depend, directly or transitively, on itself). Flag any cycle found.
+- **No empty evidence**: every node's `evidence` array must be non-empty. Flag any node with `evidence: []`.
+- **Dependency ordering**: the section/unit sequence in the outline (which becomes the Step 6 writing order) must respect `depends_on` — a node cannot appear before every node listed in its `depends_on`. Flag any node whose position violates this topological ordering.
+
+**If any check fails**, the outline must be revised before Step 6 begins:
+- Present the specific failing node `id`s and the failed check(s) to the researcher, or
+- Loop back to the architect with the flagged nodes and ask it to repair the outline (fix missing `thesis_link`, break the cycle, add evidence, or reorder), then re-run this checklist against the revised outline.
+
+Do NOT proceed to Step 6 until all four checks pass on the current outline.
+
+
 ## ⛔ MANDATORY: NO DIRECT WRITING
 
 **You (the write-article skill) MUST NEVER write article paragraphs or sections yourself.**
@@ -336,31 +354,36 @@ The 8-skill quality pipeline (style fingerprint compliance, grammar, anti-AI, ci
 
 #### Step 6.0: Engine commit (run BEFORE the parallel spawn)
 
-Because all section-writers are spawned in a single parallel response (below), the engine decision must be **final before the spawn** — once the batch is in flight, `geminiFallback` can no longer be made consistent across sections. Commit the whole run to one engine here:
+Because all section-writers are spawned in a single parallel response (below), the engine decision must be **final before the spawn** — once the batch is in flight, `geminiFallback` can no longer be made consistent across writer units. Commit the whole run to one engine here:
 
 1. **Verify the Gemini tool is actually registered**, not merely that `GOOGLE_API_KEY` is set. A key can be present while the plugin's `mcp__gemini-api__*` MCP tools are absent from your toolset (e.g., the server failed to register). Check whether `mcp__gemini-api__gemini_write_section` appears in your available tools. Optionally, fire one tiny probe call (e.g., `gemini_calibrate_sample` with a trivial input) to confirm the server responds.
 2. **If `geminiMode` is `"gemini"` but the tool is unavailable** (or the probe errors), set `.academic-helper/session-state.json > geminiFallback: true` now — before spawning. The user has already been asked once during the mid-run failure handler / pre-flight, so do not re-ask here; this is a registration check, not a runtime failure.
-3. **Read the committed `geminiFallback` value once**, and pass that SAME value to EVERY section-writer in the parallel batch below.
+3. **Read the committed `geminiFallback` value once**, and pass that SAME value to EVERY section-writer spawned for EVERY writer unit in the parallel batch below.
 
-> **Never mix engines across sections — decide once, before the parallel spawn, and pass `geminiFallback` uniformly.** Sections 1..N must all run on the same engine; a half-Gemini/half-Claude article cannot be style-unified by the synthesizer.
+> **Never mix engines across writer units — decide once, before the parallel spawn, and pass `geminiFallback` uniformly.** Every writer unit across every section must run on the same engine; a half-Gemini/half-Claude article cannot be style-unified by the synthesizer.
 
-**CRITICAL: Use the Agent tool to spawn one `section-writer` subagent per section. Call the Agent tool multiple times in a single response — one call per section — so all sections write in parallel.**
+**CRITICAL: Use the Agent tool to spawn one `section-writer` subagent per WRITER UNIT. Call the Agent tool multiple times in a single response — one call per unit — so all writer units write in parallel.**
 
+A section with no `units` array in the approved outline is itself a single writer unit — spawn exactly one subagent for it, same as before. A section WITH a `units` array is NOT itself spawned directly — spawn one subagent per entry in its `units` array instead. The parallel fan-out count for this step is therefore the total number of writer units across the whole outline, which may exceed the number of top-level sections.
 
-For each section in the approved outline, the Agent tool prompt must include:
-- `section`: the section spec (title, description, argument role, suggested sources, paragraph count)
-- `sectionIndex`: the section number
-- `totalSections`: total section count
+For each writer unit in the approved outline, the Agent tool prompt must include:
+- `unit`: the writer unit's own spec — its `id`, `claim`, `evidence`, `depends_on`, `thesis_link`, `argument_role`, and target words (from thresholds.json's `writerUnit` fields, e.g. `writerUnit.targetWords`)
+- `parentSection`: the parent section's overall brief/thesis-link context (title, `argument_role`, `thesis_link`) — for a section with no `units` array, this can mirror the unit's own info or be omitted as trivial
+- `siblingUnitsSummary`: a short summary of sibling units' briefs/claims within the same section, so prose transitions flow naturally between subsections — only relevant/non-empty when the section has multiple units
+- `sectionIndex`: the PARENT section's number in the outline
+- `totalSections`: total top-level section count
+- `unitIndex` / `unitId`: the unit's own id within its parent section (e.g. `"II.1"`)
+- `totalUnitsInSection`: how many writer units the parent section contains
 - `thesis`: the article thesis
 - `articleStructure`: the researcher's structure conventions
 - `citationStyle`: from the profile
 - `targetLanguage`: from the profile
-- `targetWordCount`: the requested article length (so each section is sized proportionally)
+- `targetWordCount`: the requested article length (so each unit is sized proportionally)
 - `tools`: the enabled tools
-- `priorSectionTexts`: text of all previously completed sections (for repetition awareness)
+- `priorSectionTexts`: text of all previously completed sections/units (for repetition awareness)
 - `outlineOverview`: full outline titles and roles
-- `userDraftParagraphs`: (if `userDraftAsOutline = true`) the user's draft text for this section — agents expand this rather than writing from scratch
-- `geminiFallback`: the value committed in Step 6.0 above (read from `.academic-helper/session-state.json`). Pass the SAME value to every section-writer in this batch — never spawn some sections with `true` and others with `false`.
+- `userDraftParagraphs`: (if `userDraftAsOutline = true`) the user's draft text for this unit — agents expand this rather than writing from scratch
+- `geminiFallback`: the value committed in Step 6.0 above (read from `.academic-helper/session-state.json`). Pass the SAME value to every section-writer in this batch — never spawn some units with `true` and others with `false`.
 
 **NOTE:** Do NOT pass `styleFingerprint`, `linkingWords`, `sourcesRegistry`, or `evidenceOwnership` in the prompt — section-writer agents load all four directly from disk to reduce context size:
 - Fingerprint from `.academic-helper/profile.md`
@@ -370,7 +393,7 @@ For each section in the approved outline, the Agent tool prompt must include:
 
 Each section-writer handles a **per-paragraph 8-skill pipeline** internally — in order: Draft → Style Compliance → Hebrew Grammar → Academic Language → Language Purity → Anti-AI → Repetition Check → Citation Audit (logged per paragraph as `section_N_p_M_<skill>`). The authoritative contract for that pipeline — exact skill behavior, the 220-word ceiling, the `thresholds.json`-driven anti-AI gate, and the auditor hard gate (Citation Audit / Skill 8) — lives in the `section-writer` agent definition (`src/agents/section-writer.md`). Do not duplicate or override it here; the orchestrator only spawns section-writers and waits for their results.
 
-After receiving each section-writer result, mark node complete:
+After receiving each section-writer result (per writer unit), mark node complete:
 
 
 ### Step 8: Synthesis + Full-Article Repetition Check
@@ -388,7 +411,7 @@ Once all sections are approved, log the spawn event:
 
 
 **Phase A — Synthesis review** (`synthesize` node):
-- Argument coherence, logical flow, transitions
+- Argument coherence, logical flow, transitions — including subsection-to-subsection transitions WITHIN a section (between sibling writer units), not just section-to-section transitions
 - Full-article style fingerprint compliance
 - Redundancies & gaps
 

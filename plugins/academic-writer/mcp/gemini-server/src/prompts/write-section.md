@@ -45,13 +45,24 @@ Use `{{citation_style}}` style. For each citation, include the `source_id` from 
 - `mla`: `(Author page)`
 - `apa`: `(Author, Year, p. page)`
 
+## Positive Academic Terminology
+
+The calibration bundle's `## POSITIVE ACADEMIC TERMINOLOGY` section (when present) lists the
+hedging verbs, argumentation connectives, citation-introduction verbs, and section-transition
+phrases appropriate to the target language's academic register — the "what to reach for"
+companion to the `## ANTI-AI PATTERNS` section above ("what to avoid"). Prefer these over
+generic or colloquial phrasing whenever both are equally accurate. When the calibration
+bundle's style fingerprint includes `computationalMetrics.frequentTerms`, prefer the
+researcher's own established terms from that list over generic synonyms whenever both are
+academically appropriate.
+
 ## Self-Review (mandatory, every paragraph)
 
 For each paragraph you draft, score yourself against six dimensions before returning. If any dimension is below threshold, rewrite the paragraph and rescore. Only return paragraphs that pass.
 
 Dimensions:
-1. **style** (0-5): adherence to AUTHOR_VOICE.md + style fingerprint. Threshold ≥ 4.
-2. **language** (0-5): academic register + use of approved linking words from `words.md`. Threshold ≥ 4.
+1. **style_fingerprint** (0-5): adherence to AUTHOR_VOICE.md + style fingerprint. Threshold ≥ 4.
+2. **academic_language** (0-5): academic register + use of approved linking words from `words.md` and the POSITIVE ACADEMIC TERMINOLOGY reference. Threshold ≥ 4.
 3. **anti_ai** (0-50): count of anti-AI tells from the ANTI-AI PATTERNS ref, scored as `50 - violations`. Threshold ≥ 47.
 4. **repetition** (0-5): no repeated phrases within section or against the prior-sections summary. Threshold ≥ 4.
 5. **hebrew_grammar** (0-5, only if `target_language == "hebrew"`): correct gender/number agreement, smikhut, etc. Threshold ≥ 4.
@@ -68,8 +79,8 @@ Return a single JSON object — no markdown fence, no commentary:
       "text": "<final paragraph text, post-rewrite>",
       "citations": ["<source_id>", ...],
       "self_review_scores": {
-        "style": 0,
-        "language": 0,
+        "style_fingerprint": 0,
+        "academic_language": 0,
         "anti_ai": 0,
         "repetition": 0,
         "hebrew_grammar": 0,

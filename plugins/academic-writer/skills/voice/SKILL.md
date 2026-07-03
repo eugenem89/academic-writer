@@ -11,6 +11,16 @@ metadata: {author: "Yotam Fromm", version: "0.2.19"}
 Top-level entry to the Stage 2 voice-deepening pipeline. Sub-actions inferred from natural language
 or specified explicitly.
 
+## Author key
+
+Voice sync is keyed by the profile.md `author_key` field (`.academic-helper/profile.md`), not by a
+free-text writer name. CandleKeep is the canonical cross-project store: per the plugin's no-`$HOME`
+rule (see root `CLAUDE.md`), the plugin cannot write a local cross-project file outside the current
+project, so CandleKeep — under a book titled `Voice Profile — <author_key>` — is the only
+cross-project persistence mechanism. `src/skills/voice/voice-sync.sh` resolves `author_key` from
+`.academic-helper/profile.md` and fails loudly (exit 1, no silent fallback) if it is missing; run
+`/academic-writer:init` to set it.
+
 ## Sub-actions
 
 - `:voice init` — start the 7-session interview from the current `.voice/fingerprint.md`

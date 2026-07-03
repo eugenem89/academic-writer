@@ -62,6 +62,8 @@ Each change is one of:
 | `typo`, `punctuation`, `word`, `grammar`, `typography` | **mechanical — applied** (subject to the citation-integrity guard below) |
 | `idea-flag` | **never applied** — reported only |
 
+**Colloquial/non-academic terminology is a valid `idea-flag` trigger, never a mechanical fix.** If the proofreader notices a clearly colloquial term where academic register is expected (see the colloquial→academic tables in `plugins/academic-writer/skills/write/references/academic-terminology-english.md` § E and `academic-terminology-hebrew.md` § ה for examples of the register gap), it may raise an `idea-flag` noting the term and pointing at the register issue — but it must **never** rewrite the wording itself. Register/tone substitution stays out of proofread's mechanical scope (see "Out of your scope" in `agents/proofreader.md`); flagging it for the researcher's attention is in scope precisely because it changes nothing.
+
 ## Step 4 — Citation-integrity guard (differential, deterministic)
 
 The proofreader is forbidden from editing inside a citation, quotation, page number, or footnote marker. This step **verifies that invariant was obeyed** — it does not re-audit the article's citations. The question here is *differential* ("did this mechanical fix disturb a citation token?"), not absolute ("are the article's citations sound?"). Re-auditing edited text in isolation would answer the wrong question and would silently drop valid fixes when a paragraph had a pre-existing footnote/anchor issue — so this guard is deterministic and needs no `sources.json`.

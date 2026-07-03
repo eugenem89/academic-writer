@@ -13,7 +13,7 @@ Prose rewrites are delegated to Gemini via `mcp__gemini-api__gemini_synthesize` 
 
 ## Primary path: Gemini synthesis
 
-After completing the structural read (steps 1-3 of "Process" below — identify intro/conclusion fixes, gap flags, transition issues, repetition flags), call:
+After completing the structural read (steps 1-4 of "Process" below — identify intro/conclusion fixes, argument-graph fidelity gaps, transition issues, repetition flags), call:
 
 ```
 mcp__gemini-api__gemini_synthesize({
@@ -38,7 +38,7 @@ Expected return:
 
 After Gemini returns, verify:
 1. All inline citations match the input (no additions, removals, or text changes inside parens).
-2. The change_log items are surgical (no full-paragraph rewrites except for evidence-consolidation back-references — see Process rule 8).
+2. The change_log items are surgical (no full-paragraph rewrites except for evidence-consolidation back-references — see Process rule 9).
 3. Run the **Full-Article Repetition Check** below on the revised draft — you do this; Gemini does not.
 
 ## MCP error handling — fallback
@@ -110,13 +110,23 @@ If the conclusion fails any of these checks, make targeted additions.
 ### 3. Argument Coherence
 Does each section contribute to proving the thesis? Are there sections that don't advance the argument? Are there gaps where an argument step is missing?
 
-### 4. Logical Flow
-Does the article move logically from section to section? Could a reader follow the argument without confusion?
+### 4. Argument Graph Fidelity
 
-### 5. Transitions
-Are section endings and openings connected? Do the transitions signal what comes next? Use the researcher's preferred transition phrases.
+Check the delivered prose against the architect's argument-graph outline fields (`id`, `claim`, `evidence`, `depends_on`, `thesis_link`, `argument_role`):
 
-### 6. Academic Language & Linking Words
+- **Claim advancement**: Does each unit/section's delivered prose actually advance its declared `claim`? Not just gesture at the topic — does the prose make the specific argumentative move the claim promises?
+- **Dependency fulfillment**: Are `depends_on` dependencies actually referenced or built upon in the text, not just declared in the outline but silently ignored in the writing? (E.g. if section III `depends_on` section II, does section III's prose actually pick up and build on section II's argument, or does it start fresh as if section II didn't exist?)
+- **Thesis-link integrity**: Does the chain of claims actually reach and support the thesis statement? Walk the `thesis_link` chain (section/unit → its `depends_on` ancestors → ... → thesis) against the **final prose** (not just the outline) to verify the argument genuinely lands on the thesis, not just that the outline claimed it would.
+
+If a check fails and the fix requires new argumentative content, flag it with `[GAP: requires new content from section-writer]` rather than fabricating it. If it's a smaller connective-tissue fix (e.g. an explicit back-reference tying a section to its dependency), make a surgical edit per the "surgical edits only" rule (Process rule 9).
+
+### 5. Logical Flow
+Does the article move logically from section to section? Could a reader follow the argument without confusion? Where a section was decomposed into `units` (writer-unit subsections), this also applies unit-to-unit within that section — could a reader follow the argument moving from one unit to the next without confusion?
+
+### 6. Transitions
+Are section endings and openings connected? Do the transitions signal what comes next? Use the researcher's preferred transition phrases. This check applies both **between sections** and, where a section was split into `units`, **between subsections (units) within a section** — the last paragraph of unit N should bridge naturally to the first paragraph of unit N+1 within the same section, using the same transition-phrase discipline as section boundaries.
+
+### 7. Academic Language & Linking Words
 
 Verify the entire article uses **proper academic Hebrew** (or target language):
 - No colloquial or simplistic vocabulary
@@ -128,7 +138,7 @@ Verify the entire article uses **proper academic Hebrew** (or target language):
 
 If linking words are missing, repeated, or misused, fix them.
 
-### 7. Style Fingerprint Compliance (full-article)
+### 8. Style Fingerprint Compliance (full-article)
 
 **Re-read the complete `styleFingerprint` from the profile.** Evaluate the entire article against every fingerprint dimension:
 
@@ -142,14 +152,14 @@ If linking words are missing, repeated, or misused, fix them.
 
 Flag specific passages that deviate and make surgical fixes.
 
-### 8. RTL Punctuation & Parentheses (Hebrew)
+### 9. RTL Punctuation & Parentheses (Hebrew)
 
 For Hebrew articles, verify standard Unicode parentheses, correct punctuation placement, consistent citation format, Hebrew quotation marks.
 
-### 9. Redundancies & Gaps
+### 10. Redundancies & Gaps
 Are any points repeated unnecessarily? Are any crucial steps in the argument missing?
 
-### 10. Language Purity (Final Sweep)
+### 11. Language Purity (Final Sweep)
 
 Scan the entire article for **embedded foreign language text** that survived per-paragraph checks. Replace with target-language equivalent, transliteration, or footnote.
 
@@ -157,13 +167,14 @@ Scan the entire article for **embedded foreign language text** that survived per
 
 1. Read all sections in order
 2. **First check**: Introduction and conclusion structure — fix these FIRST
-3. Make targeted revisions for all other criteria
-4. Fix transitions between sections
-5. Strengthen topic sentences that don't clearly advance the thesis
-6. Remove or condense redundant passages
-7. Flag (don't fix) any gaps that require new source material
-8. NEVER rewrite full paragraphs — make surgical edits only. **EXCEPT for evidence consolidation:** when the same source/evidence (same tablet, passage, dataset, artifact) is fully re-described in two or more body sections, keep the full description in the section where the evidence does the most argumentative work (consult `.academic-helper/evidence-ownership.json` if present — the `ownerSectionIndex` names the intended owner) and reduce the other occurrences to a back-reference (e.g., "as discussed in Section II above"). This is the ONLY condition under which you may rewrite more than a sentence at a time.
-9. NEVER change or remove any citation — citations are locked
+3. **Argument-graph fidelity check**: Walk each section/unit's `claim`, `depends_on`, and `thesis_link` against the delivered prose (Criterion 4) — flag or surgically fix gaps before moving to general revisions
+4. Make targeted revisions for all other criteria
+5. Fix transitions between sections, and, where a section was split into `units`, between subsections (units) within that section
+6. Strengthen topic sentences that don't clearly advance the thesis
+7. Remove or condense redundant passages
+8. Flag (don't fix) any gaps that require new source material
+9. NEVER rewrite full paragraphs — make surgical edits only. **EXCEPT for evidence consolidation:** when the same source/evidence (same tablet, passage, dataset, artifact) is fully re-described in two or more body sections, keep the full description in the section where the evidence does the most argumentative work (consult `.academic-helper/evidence-ownership.json` if present — the `ownerSectionIndex` names the intended owner) and reduce the other occurrences to a back-reference (e.g., "as discussed in Section II above"). This is the ONLY condition under which you may rewrite more than a sentence at a time.
+10. NEVER change or remove any citation — citations are locked
 
 Log synthesis completion:
 
@@ -180,7 +191,7 @@ After synthesis revisions, run a **dedicated cross-section repetition pass**.
 2. **Cross-section phrase repetition** (5+ words in more than one section)
 3. **Opening sentence patterns** (no two sections start with same structure)
 4. **Transition phrase reuse** (max 2x per article)
-5. **Evidence reuse** (same source for same purpose) — if the same evidence is described in full in two or more sections, consolidate per Process rule #8. Consult `.academic-helper/evidence-ownership.json` to decide which section owns the full description.
+5. **Evidence reuse** (same source for same purpose) — if the same evidence is described in full in two or more sections, consolidate per Process rule #9. Consult `.academic-helper/evidence-ownership.json` to decide which section owns the full description.
 6. **Formulaic pattern caps** — Load `plugins/academic-writer/skills/write/references/anti-ai-patterns-${targetLanguage_lower}.md`. For each named pattern with a per-article cap (e.g., "I do not address here…" capped at 2; "I suggest that…" capped at 3), count occurrences across the whole article. For any pattern exceeding its cap, rewrite the overflow instances (convert to direct statement, remove the hedging, or vary the phrasing). The cap is authoritative.
 7. **Abstract/intro/section-opener deduplication** — Compare the first sentence of every body section against sentences in the abstract and the introduction (first paragraph of Section I). If any body-section opener shares 5+ content words with an abstract/intro sentence, rewrite the body-section opener to advance the argument rather than restate the thesis. Thesis is stated once in the abstract and once in the introduction; body-section openers must do new work.
 

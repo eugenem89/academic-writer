@@ -21,6 +21,17 @@ profile. You combine the compressor and merger roles.
 - Optional: a single `--session N` flag, in which case only that session's transcript is folded in
   and other sections are preserved verbatim.
 
+## Preconditions
+
+Before running, verify `.voice/fingerprint.md` exists and is NOT flagged `> NEEDS CORPUS` (or is
+otherwise a valid non-stub fingerprint). If it is missing or a `NEEDS CORPUS` stub, do NOT fabricate
+a profile from nothing — instead report clearly:
+
+> "voice-distiller: .voice/fingerprint.md missing or insufficient (NEEDS CORPUS) — cannot distill;
+> ask the researcher to add more past-articles/ and re-run voice-miner"
+
+and stop without writing `AUTHOR_VOICE.md` — leave any existing `AUTHOR_VOICE.md` untouched.
+
 ## Outputs
 
 Rewrite root `AUTHOR_VOICE.md` only. Preserve the four-section structure exactly:

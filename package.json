@@ -8,7 +8,7 @@
     "build:hooks": "cd src/hooks && npm run build",
     "build:mcp": "bash scripts/build-mcp.sh",
     "typecheck": "cd src/hooks && npx tsc --noEmit",
-    "clean": "rm -rf plugins/ src/hooks/dist/ plugins/academic-writer/mcp/gemini-server/dist/ plugins/academic-writer/mcp/gemini-server/node_modules/"
+    "clean": "find plugins/academic-writer -mindepth 1 -maxdepth 1 ! -name mcp -exec rm -rf {} + 2>/dev/null; rm -rf src/hooks/dist/ plugins/academic-writer/mcp/gemini-server/dist/ plugins/academic-writer/mcp/gemini-server/node_modules/"
   },
   "repository": {
     "type": "git",

@@ -43,8 +43,7 @@ Slash commands are auto-generated from skills with `user-invocable: true`. To ad
 | `/academic-writer:edit` | edit | Revise a drafted article |
 | `/academic-writer:edit-section` | edit-section | Revise one section only |
 | `/academic-writer:proofread` | proofread | Mechanical הגהה pass — fixes + change report |
-| `/academic-writer:init` | init | Full onboarding (first install) |
-| `/academic-writer:setup` | setup | Quick onboarding |
+| `/academic-writer:init` | init | Full onboarding (first install); pass `--quick` for fast onboarding (replaces the old `/academic-writer:setup` command — `setup` is now an internal, non-invocable thin wrapper) |
 | `/academic-writer:research` | research | Investigate a topic |
 | `/academic-writer:ideate` | ideate | Frame a research question |
 | `/academic-writer:review` | review | Score an article before submission |
@@ -67,8 +66,8 @@ Slash commands are auto-generated from skills with `user-invocable: true`. To ad
 ## Pipeline pattern
 
 The `write` and `edit` skills use a chained-with-gates pattern:
-1. Conversational planning phase (architect agent, human in the loop).
-2. Parallel section writing (one section-writer subagent per section).
+1. Conversational planning phase (architect agent, human in the loop) — the architect emits a hierarchical outline (sections → writer units of `thresholds.json > writerUnit` size) with an argument graph (claim / evidence / depends_on / thesis_link per node), validated by a logic gate before writing.
+2. Parallel section writing (one section-writer subagent per writer unit).
 3. Per-paragraph 8-skill pipeline (draft → 6 checks → citation audit hard gate).
 4. Synthesis pass + self-review scorecard.
 

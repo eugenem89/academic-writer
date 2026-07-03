@@ -5,6 +5,11 @@
 //
 // Prints a single JSON object on stdout with the real Hebrew outputs + pass flags so a caller
 // (or the finalize workflow) can verify the Gemini path produces cited Hebrew prose.
+//
+// For a fast, offline, unit-level check of the `gemini_write_section` input/output schema
+// contract (no API key, no network) run instead:
+//
+//   node tests/e2e/write-section-schema-contract.mjs
 import { pathToFileURL } from 'node:url';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';

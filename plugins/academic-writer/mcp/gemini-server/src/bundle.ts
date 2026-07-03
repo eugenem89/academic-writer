@@ -14,6 +14,7 @@ export interface CalibrationBundle {
   words: string;
   antiAi: string;
   rubric: string;
+  positiveTerminology: string;
   targetLanguage: string;
 }
 
@@ -79,6 +80,32 @@ async function loadAntiAi(plugin: string, targetLanguage: string): Promise<strin
   return await readOptional(fallback);
 }
 
+/**
+ * Positive academic-register vocabulary for the target language — the
+ * "use these" counterpart to `loadAntiAi`'s "avoid these" reference.
+ */
+async function loadPositiveTerminology(plugin: string, targetLanguage: string): Promise<string> {
+  const lc = lang(targetLanguage);
+  const candidate = path.join(
+    plugin,
+    'skills',
+    'write',
+    'references',
+    `academic-terminology-${lc}.md`,
+  );
+  const primary = await readOptional(candidate);
+  if (primary) return primary;
+  // Fallback to Hebrew per existing plugin convention.
+  const fallback = path.join(
+    plugin,
+    'skills',
+    'write',
+    'references',
+    'academic-terminology-hebrew.md',
+  );
+  return await readOptional(fallback);
+}
+
 export async function getBundle(targetLanguage: string): Promise<CalibrationBundle> {
   const key = lang(targetLanguage);
   const hit = cache.get(key);
@@ -88,7 +115,7 @@ export async function getBundle(targetLanguage: string): Promise<CalibrationBund
   const plugin = pluginRoot();
 
   try {
-    const [voice, profileMd, words, antiAi, rubric] = await Promise.all([
+    const [voice, profileMd, words, antiAi, rubric, positiveTerminology] = await Promise.all([
       readOptional(path.join(project, 'AUTHOR_VOICE.md')),
       readOptional(path.join(project, '.academic-helper', 'profile.md')),
       readOptional(path.join(plugin, 'words.md')),
@@ -96,6 +123,7 @@ export async function getBundle(targetLanguage: string): Promise<CalibrationBund
       readOptional(
         path.join(plugin, 'skills', 'write', 'references', 'style-fingerprint-rubric.md'),
       ),
+      loadPositiveTerminology(plugin, key),
     ]);
 
     const fingerprint = extractStyleFingerprint(profileMd);
@@ -106,6 +134,7 @@ export async function getBundle(targetLanguage: string): Promise<CalibrationBund
       words,
       antiAi,
       rubric,
+      positiveTerminology,
       targetLanguage: key,
     };
     cache.set(key, bundle);
@@ -129,6 +158,8 @@ export function renderBundleMarkdown(b: CalibrationBundle): string {
   if (b.rubric) sections.push('## STYLE FINGERPRINT RUBRIC\n\n' + b.rubric);
   if (b.words) sections.push('## ACADEMIC LINKING WORDS\n\n' + b.words);
   if (b.antiAi) sections.push('## ANTI-AI PATTERNS\n\n' + b.antiAi);
+  if (b.positiveTerminology)
+    sections.push('## POSITIVE ACADEMIC TERMINOLOGY\n\n' + b.positiveTerminology);
   return sections.join('\n\n---\n\n');
 }
 

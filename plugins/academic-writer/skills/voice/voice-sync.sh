@@ -3,7 +3,7 @@
 # Usage: voice-sync.sh {pull|push|status}
 # Env:
 #   VOICE_PROJECT_ROOT — overrides $(pwd) for testing
-#   VOICE_WRITER_NAME  — overrides writer name lookup; default reads from profile.json/book.yaml
+#   VOICE_WRITER_NAME  — overrides author_key resolution; primarily for testing
 
 set -euo pipefail
 
@@ -12,20 +12,33 @@ root="${VOICE_PROJECT_ROOT:-$(pwd)}"
 profile="$root/AUTHOR_VOICE.md"
 voice_dir="$root/.voice"
 id_cache="$voice_dir/.candlekeep-id"
+profile_md="$root/.academic-helper/profile.md"
 
-# Resolve writer name (best-effort; empty is fine)
-writer="${VOICE_WRITER_NAME:-}"
-if [[ -z "$writer" ]]; then
-  if [[ -f "$root/.academic-helper/profile.json" ]]; then
-    writer=$(grep -E '"writer_name"' "$root/.academic-helper/profile.json" 2>/dev/null \
-      | sed -E 's/.*"writer_name"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/' || true)
-  elif [[ -f "$root/book.yaml" ]]; then
-    writer=$(grep -E '^author:' "$root/book.yaml" 2>/dev/null \
+# Resolve author_key. Primary source: .academic-helper/profile.md YAML frontmatter.
+# VOICE_WRITER_NAME is an env override kept for testing only — the canonical path is profile.md.
+# No silent fallback: if neither source yields a value, fail loudly and exit.
+author_key="${VOICE_WRITER_NAME:-}"
+if [[ -z "$author_key" ]]; then
+  if [[ -f "$profile_md" ]]; then
+    author_key=$(grep -E '^author_key:' "$profile_md" 2>/dev/null \
+      | sed -E 's/^author_key:[[:space:]]*//' | tr -d '"' || true)
+  fi
+fi
+
+if [[ -z "$author_key" ]]; then
+  # Secondary source: book.yaml (sibling hebrew-book-producer projects). Also fails loudly if empty.
+  if [[ -f "$root/book.yaml" ]]; then
+    author_key=$(grep -E '^author:' "$root/book.yaml" 2>/dev/null \
       | sed -E 's/^author:[[:space:]]*"?([^"]*)"?$/\1/' || true)
   fi
 fi
-[[ -z "$writer" ]] && writer="<unknown>"
-title="Voice Profile — $writer"
+
+if [[ -z "$author_key" ]]; then
+  echo "voice-sync: author_key not found in .academic-helper/profile.md — run /academic-writer:init to set it" >&2
+  exit 1
+fi
+
+title="Voice Profile — $author_key"
 
 if ! command -v ck >/dev/null 2>&1; then
   echo "voice-sync: ck not available — local-only mode"

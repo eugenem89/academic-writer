@@ -60,3 +60,15 @@ compliance = (numerical_compliance * 0.5) + (qualitative_score * 0.5)
 Check the `contrastive` section of the fingerprint. Any dimension marked `distinctively_high` or `distinctively_low` is what makes this researcher's writing UNIQUE. These are the most important dimensions. If the researcher is "distinctively high" on transition frequency, the paragraph MUST have transitions. If "distinctively low" on passive voice, avoid passive constructions aggressively.
 
 **Always refer to `representativeExcerpts`** as concrete style models. When rewriting, the excerpts are your target.
+
+## Preferred Terminology (frequentTerms)
+
+`computationalMetrics.frequentTerms` (emitted by `extract-style-metrics.py`, capped at
+`thresholds.json > typography.styleMetrics.topFrequentTermsCount` terms, minimum length
+`typography.styleMetrics.minTermLength`) lists the researcher's own highest-frequency
+content vocabulary — the terms this specific author actually reaches for, as distinct from
+the generic-but-correct terms in `academic-terminology-{lang}.md`. When both a generic
+academically-appropriate term and one of the researcher's own `frequentTerms` would fit a
+sentence equally well, prefer the researcher's own term — it is what makes the prose sound
+like this author rather than a competent-but-generic academic voice. This is a preference,
+not a hard gate: never force a `frequentTerms` entry where it would be a poor semantic fit.

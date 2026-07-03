@@ -86,10 +86,20 @@ When given an approved thesis + source material + word count target, generate a 
 
 Every section must:
 - Have a **clear title**
-- Have a **argument role** (e.g., "establishes historical context", "introduces the counterargument", "synthesizes evidence toward thesis")
 - List **suggested sources** (author, work, page range to consult)
 - Have an **estimated word count**
-- Have a **paragraph count** (word count / ~150 words per paragraph)
+- Have a **paragraph count** (word count / ~150 words per paragraph). If a section's estimated word count exceeds thresholds.json's writerUnit.maxWords value, the section must be decomposed into multiple writer-unit subsections (a `units` array — see "Hierarchical Writer-Unit Decomposition" below) rather than left as one oversized unit.
+- Carry an explicit **argument-graph node**: every section AND every writer unit must have a stable `id` (e.g. section `"II"`, unit `"II.1"`), an `argument_role` (free-text role, e.g. "establishes historical context", "introduces the counterargument", "synthesizes evidence toward thesis"), a `claim` (the specific claim this node advances), an `evidence` array (id strings referencing `sources.json` entries or evidence-ownership-map `evidenceId` values — must be non-empty for every node; the write skill's argument-graph validation gate rejects outlines with empty `evidence` arrays), a `depends_on` array (ids of prior sections/units whose claims this one builds on — empty array if none), and a `thesis_link` (one sentence describing how this node advances the overall thesis). `argument_role` is one field within this structure, not a standalone free-text label.
+
+### Hierarchical Writer-Unit Decomposition
+
+A section whose estimated word count exceeds thresholds.json's writerUnit.maxWords value must be split into multiple leaf writer units so that each unit is handled by exactly one section-writer subagent:
+
+- Each leaf unit's word count must fall within thresholds.json's writerUnit.minWords–writerUnit.maxWords range, targeting thresholds.json's writerUnit.targetWords value.
+- Give each unit a stable id nested under its parent section id (e.g. section `"II"` → units `"II.1"`, `"II.2"`).
+- If splitting would leave adjacent units under thresholds.json's writerUnit.minWords value, merge them into one unit rather than leaving tiny units behind.
+- A section that does not exceed thresholds.json's writerUnit.maxWords value needs no `units` array — the section itself is the single writer unit (one subagent).
+- Each unit carries its own `id`, title, word target, and the same argument-graph node fields described above (`argument_role`, `claim`, `evidence`, `depends_on`, `thesis_link`).
 
 ### Conciseness Budget on Descriptions
 
@@ -152,22 +162,56 @@ Total word count: [N]
 Citation style: [chicago/mla/apa/inline-parenthetical]
 
 I. Introduction (~N words, N paragraphs)
+   id: "I"
    Role: States problem, thesis, and article roadmap
    Sources: [Author, Work pp. X–Y]
    Description: [MUST include: opening with "במאמר זה...", clear thesis statement, roadmap describing what each subsequent section covers, context for why this topic matters]
+   claim: "[the specific claim this section advances]"
+   evidence: ["evidence-id-for-framing-source"]
+   depends_on: []
+   thesis_link: "[one sentence on how this section advances the overall thesis]"
 
-II. [Body Section Title] (~N words, N paragraphs)
+II. [Body Section Title] (~N words, N paragraphs — exceeds thresholds.json's writerUnit.maxWords value, split into units)
+   id: "II"
    Role: [argument role]
    Sources: [Author, Work pp. X–Y]
    Description: [what this section argues]
+   claim: "[the specific claim this section advances]"
+   evidence: ["evidence-id-1", "evidence-id-2"]
+   depends_on: ["I"]
+   thesis_link: "[one sentence on how this section advances the overall thesis]"
+   units:
+     - id: "II.1"
+       title: [unit title] (~N words, within writerUnit.minWords–writerUnit.maxWords, target writerUnit.targetWords)
+       Role: [argument role]
+       Sources: [Author, Work pp. X–Y]
+       claim: "[the specific claim this unit advances]"
+       evidence: ["evidence-id-1"]
+       depends_on: ["I"]
+       thesis_link: "[one sentence on how this unit advances the overall thesis]"
+     - id: "II.2"
+       title: [unit title] (~N words, within writerUnit.minWords–writerUnit.maxWords, target writerUnit.targetWords)
+       Role: [argument role]
+       Sources: [Author, Work pp. X–Y]
+       claim: "[the specific claim this unit advances]"
+       evidence: ["evidence-id-2"]
+       depends_on: ["II.1"]
+       thesis_link: "[one sentence on how this unit advances the overall thesis]"
 
 ...
 
 N. Conclusion (~N words, N paragraphs)
+   id: "N"
    Role: Returns to thesis, summarizes arguments, widens implications
    Sources: [references back to key sources from body]
    Description: [MUST include: opening with "לסיכום" or equivalent, recap of each section's contribution, thesis reaffirmation, broader implications, strong closing statement]
+   claim: "[the thesis, reaffirmed]"
+   evidence: ["evidence-id-1", "evidence-id-2"]
+   depends_on: ["I", "II", "..."]
+   thesis_link: "[one sentence on how the conclusion closes the overall thesis]"
 ```
+
+A section with no `units` array is itself a single writer unit — one subagent handles it. Only sections exceeding thresholds.json's writerUnit.maxWords value need a `units` array.
 
 ### Evidence Ownership Map (Mode B only)
 
@@ -195,6 +239,7 @@ Assignment rules:
 - All other sections that use it go into `backRefSections` — they are NOT allowed to re-describe the evidence in full; they must back-reference ("as discussed in Section II above").
 - Evidence that appears in only one section does not need an entry.
 - `claimsRegistry` starts empty. Section-writers append claim records as they complete paragraphs.
+- When a section has been split into writer units (per "Hierarchical Writer-Unit Decomposition" above), `ownerSectionIndex` and `backRefSections` values may reference either a top-level section index (e.g. `2`) OR a specific unit id string (e.g. `"2.1"`) — use whichever is the more precise owner of that evidence.
 
 Write the file with the Write tool:
 ```

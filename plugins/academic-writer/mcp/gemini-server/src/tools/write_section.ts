@@ -19,8 +19,23 @@ export const BannedTerm = z.object({
 });
 export type BannedTerm = z.infer<typeof BannedTerm>;
 
+// Structured section brief, per src/agents/section-writer.md Step A call shape.
+export const SectionBrief = z.object({
+  title: z.string(),
+  description: z.string(),
+  argument_role: z.string(),
+  paragraph_count: z.number(),
+  is_intro: z.boolean(),
+  is_conclusion: z.boolean(),
+  intro_or_conclusion_rules: z.string().optional().default(''),
+  paragraph_word_ceiling: z.number(),
+});
+export type SectionBrief = z.infer<typeof SectionBrief>;
+
 export const WriteSectionInput = z.object({
-  section_brief: z.string().min(1),
+  // Structured brief is the documented call shape; a plain string remains valid
+  // for backward compatibility with older callers.
+  section_brief: z.union([SectionBrief, z.string().min(1)]),
   sources: z.array(SourceExcerpt),
   evidence_ownership: z.record(z.string(), z.unknown()),
   banned_terms: z.array(BannedTerm).default([]),
@@ -31,8 +46,8 @@ export const WriteSectionInput = z.object({
 export type WriteSectionInput = z.infer<typeof WriteSectionInput>;
 
 export const SelfReviewScores = z.object({
-  style: z.number(),
-  language: z.number(),
+  style_fingerprint: z.number(),
+  academic_language: z.number(),
   anti_ai: z.number(),
   repetition: z.number(),
   hebrew_grammar: z.number().optional(),
@@ -69,9 +84,14 @@ export async function runWriteSection(rawInput: unknown): Promise<z.infer<typeof
   const bundle = await getBundle(input.target_language);
   const defaults = await getDefaults('write_section');
 
+  const sectionBriefText =
+    typeof input.section_brief === 'string'
+      ? input.section_brief
+      : JSON.stringify(input.section_brief, null, 2);
+
   const system = fill(WRITE_SECTION_TEMPLATE, {
     calibration_bundle: renderBundleMarkdown(bundle),
-    section_brief: input.section_brief,
+    section_brief: sectionBriefText,
     evidence_ownership: JSON.stringify(input.evidence_ownership, null, 2),
     sources: JSON.stringify(input.sources, null, 2),
     banned_terms: JSON.stringify(input.banned_terms, null, 2),
@@ -108,7 +128,13 @@ export async function runWriteSection(rawInput: unknown): Promise<z.infer<typeof
 }
 
 export const WRITE_SECTION_INPUT_SHAPE = {
-  section_brief: { type: 'string' as const, description: 'Outline + brief for the section.' },
+  section_brief: {
+    type: 'string' as const,
+    description:
+      'Outline + brief for the section. Either a structured object ' +
+      '{title, description, argument_role, paragraph_count, is_intro, is_conclusion, ' +
+      'intro_or_conclusion_rules, paragraph_word_ceiling} or a plain-string brief (legacy).',
+  },
   sources: { type: 'array' as const, description: 'Source excerpts available for citation.' },
   evidence_ownership: {
     type: 'object' as const,

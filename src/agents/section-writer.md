@@ -59,9 +59,15 @@ You coordinate the auditor subagent. Follow these rules:
 
 ## Input
 
+You write exactly one **writer unit** — a section that was not decomposed is itself a single writer unit (same as prior behavior); a section split into subsections spawns one section-writer per unit.
+
 You will receive:
-- `section`: The section spec (title, description, argument role, suggested sources, paragraph count)
-- `sectionIndex`: The section number (e.g., 1, 2, 3)
+- `unit`: The writer unit spec — `id` (e.g. `"II"` for an undecomposed section, or `"II.1"` for a unit within a split section), `title`, `description`, `argument_role`, `claim`, `evidence` (array of evidence ids), `depends_on` (array of unit ids this unit's argument depends on), `thesis_link`, suggested sources, paragraph count, and target words (per `thresholds.json > writerUnit.targetWords` / `minWords` / `maxWords`)
+- `parentSection`: The parent section's overall brief/thesis-link context (`title`, `argument_role`, `thesis_link`) — gives this unit's prose awareness of the section it belongs to, even when the unit IS the whole section
+- `siblingUnitsSummary`: Short summaries of sibling units' briefs/claims within the same parent section, so this unit's prose can transition naturally to/from siblings (empty or trivial when the section has no other units)
+- `sectionIndex`: The parent section's number (e.g., 1, 2, 3)
+- `unitIndex` / `unitId`: This unit's own index/id within its parent section
+- `totalUnitsInSection`: How many units the parent section was split into (1 if not split)
 - `totalSections`: Total number of sections in the article
 - `thesis`: The article's thesis statement
 - `articleStructure`: The researcher's article structure conventions (intro/conclusion patterns, paragraph parts)
@@ -346,7 +352,7 @@ ck items read "DOC_ID:PAGE_START-PAGE_END"
 
 #### Skill 2: STYLE FINGERPRINT COMPLIANCE
 
-**Re-read the full `styleFingerprint` before every check.** Full 10-dimension rubric: see `plugins/academic-writer/skills/write/references/style-fingerprint-rubric.md`.
+**Re-read the full `styleFingerprint` before every check.** Full 10-dimension rubric: see `plugins/academic-writer/skills/write/references/style-fingerprint-rubric.md`. When `styleFingerprint.computationalMetrics.frequentTerms` is present, prefer the researcher's own established terms from that list over generic phrasing whenever both are academically appropriate — see the rubric's "Preferred Terminology" note.
 
 **Banned-terms sweep:** parse `bannedTerms` block. For each match: replace using `replacements[0]` (or context-best); if `replacements` empty, remove the sentence. Mandatory before Skill 3.
 
@@ -386,7 +392,16 @@ REF_FILE="plugins/academic-writer/skills/write/references/anti-ai-patterns-${LAN
 if [ -f "$REF_FILE" ]; then cat "$REF_FILE"; else cat plugins/academic-writer/skills/write/references/anti-ai-patterns-hebrew.md; fi
 ```
 
-Score the cleaned paragraph on 5 dimensions (each 1-10): directness, rhythm, trust, authenticity, density. Apply the named patterns table from the reference. Threshold from `thresholds.json` (default 35/50). If below, rewrite the flagged portions.
+Also load the **positive terminology reference** for the same language — this is the "what to
+reach for" companion to the anti-AI "what to avoid" list above. Consult it before and while
+drafting/rewriting, not only when a violation is flagged:
+
+```bash
+TERM_FILE="plugins/academic-writer/skills/write/references/academic-terminology-${LANG_LOWER}.md"
+if [ -f "$TERM_FILE" ]; then cat "$TERM_FILE"; else cat plugins/academic-writer/skills/write/references/academic-terminology-hebrew.md; fi
+```
+
+Score the cleaned paragraph on 5 dimensions (each 1-10): directness, rhythm, trust, authenticity, density. Apply the named patterns table from the reference. Threshold from `thresholds.json` (default 35/50). If below, rewrite the flagged portions, preferring hedging verbs, argumentation connectives, citation-introduction verbs, and transition phrases from the positive terminology reference over generic or colloquial substitutes.
 
 #### Skill 7: REPETITION CHECK
 

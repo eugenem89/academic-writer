@@ -1,10 +1,12 @@
 """End-to-end Stage 1: corpus → fingerprint → distiller seed → AUTHOR_VOICE.md."""
+
 import subprocess, shutil, os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 FIXTURE = ROOT / "tests" / "fixtures" / "voice" / "sample-corpus"
 LEGACY_PROFILE = ROOT / "tests" / "fixtures" / "voice" / "legacy-profile.json"
+
 
 def test_stage1_seeds_author_voice(tmp_path):
     pa = tmp_path / "past-articles"
@@ -14,9 +16,19 @@ def test_stage1_seeds_author_voice(tmp_path):
     aw_dir = tmp_path / ".academic-writer"
     aw_dir.mkdir()
     shutil.copy(LEGACY_PROFILE, aw_dir / "profile.json")
+    # voice-migrate.sh is profile-scoped: it requires .academic-helper/profile.md to exist.
+    # This also gives voice-sync.sh the author_key it now requires (loud-failure hardening).
+    ah_dir = tmp_path / ".academic-helper"
+    ah_dir.mkdir()
+    (ah_dir / "profile.md").write_text(
+        "# Academic Writer Profile\n\n---\nauthor_key: test-writer\n---\n"
+    )
     # Run migration — should produce AUTHOR_VOICE.md from legacy profile
-    subprocess.run(["bash", str(ROOT / "src/skills/voice/voice-migrate.sh")],
-                   cwd=str(tmp_path), check=True)
+    subprocess.run(
+        ["bash", str(ROOT / "src/skills/voice/voice-migrate.sh")],
+        cwd=str(tmp_path),
+        check=True,
+    )
     # Stage 1 is normally agent-driven; for the structural test we shell-emit a stub fingerprint
     # to assert the surrounding pipeline works.
     (tmp_path / ".voice").mkdir(exist_ok=True)
@@ -32,8 +44,13 @@ def test_stage1_seeds_author_voice(tmp_path):
     env = os.environ.copy()
     env["PATH"] = str(stub_bin) + ":" + env["PATH"]
     # Run sync push (stub ck exits 127 → script sees ck missing → no-op)
-    r = subprocess.run(["bash", str(ROOT / "src/skills/voice/voice-sync.sh"), "push"],
-                       cwd=str(tmp_path), capture_output=True, text=True, env=env)
+    r = subprocess.run(
+        ["bash", str(ROOT / "src/skills/voice/voice-sync.sh"), "push"],
+        cwd=str(tmp_path),
+        capture_output=True,
+        text=True,
+        env=env,
+    )
     assert r.returncode == 0
     # AUTHOR_VOICE.md should have been created by migration — not seeded by the test
     avo = tmp_path / "AUTHOR_VOICE.md"

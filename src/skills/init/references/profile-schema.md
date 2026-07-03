@@ -17,7 +17,7 @@ new_path = '.academic-helper/profile.md'
 if os.path.exists(old_path) and not os.path.exists(new_path):
     with open(old_path) as f:
         p = json.load(f)
-    scalar_keys = ['fieldOfStudy', 'citationStyle', 'targetLanguage', 'updatedAt', 'createdAt']
+    scalar_keys = ['name', 'author_key', 'fieldOfStudy', 'citationStyle', 'targetLanguage', 'updatedAt', 'createdAt']
     list_keys = ['abstractLanguages', 'analyzedArticles']
     json_sections = [
         ('tools', 'Tools'), ('outputFormatPreferences', 'Output Format Preferences'),
@@ -49,6 +49,14 @@ if os.path.exists(old_path) and not os.path.exists(new_path):
 PYTHON
 ```
 
+## `author_key`
+
+`author_key`: kebab-case slug derived from the researcher's full name, stable across projects for
+the same author, used to key cross-project CandleKeep voice-profile lookups (see
+`src/skills/voice/voice-sync.sh`). Derived once during `init` Phase 2 Step 1 and confirmed with the
+user; should not be changed casually afterward since it identifies the author's CandleKeep
+`Voice Profile — <author_key>` book across every project.
+
 ## Profile File Format
 
 `.academic-helper/profile.md` uses markdown with YAML frontmatter + JSON sections:
@@ -57,6 +65,8 @@ PYTHON
 # Academic Writer Profile
 
 ---
+name: FULL_NAME_HERE
+author_key: kebab-case-slug
 fieldOfStudy: FIELD_HERE
 citationStyle: inline-parenthetical
 targetLanguage: Hebrew
@@ -85,7 +95,7 @@ updatedAt: ISO_TIMESTAMP
 ## Style Fingerprint
 
 ```json
-{ ... full 25-dimension fingerprint object ... }
+{ ... full 25-dimension fingerprint object, including computationalMetrics.frequentTerms (see category B below) ... }
 ```
 
 ## Article Structure
@@ -116,6 +126,13 @@ Run via voice-miner agent. Dimensions span 8 categories (A–I):
 6. Academic register level + first vs. impersonal person
 7. Field-specific jargon (list + how introduced)
 8. Hebrew academic conventions (if applicable)
+8a. `frequentTerms` — computational (not LLM-scored): the researcher's own top-N high-frequency
+    content vocabulary, produced by `extract-style-metrics.py` in Step 1 (count/length from
+    `thresholds.json > typography.styleMetrics.topFrequentTermsCount` / `minTermLength`). Carry
+    this array through into `computationalMetrics.frequentTerms` in the saved fingerprint
+    unchanged — do not re-derive it qualitatively. Used by section-writer to prefer the
+    researcher's own established terms over generic phrasing (see
+    `write/references/style-fingerprint-rubric.md § Preferred Terminology`).
 
 ### C. Paragraph & Argument Structure
 9. Paragraph structure pattern (detailed step-by-step)

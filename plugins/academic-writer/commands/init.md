@@ -1,6 +1,6 @@
 ---
-description: First-time setup for the Academic Writer. Configures researcher profile, analyzes writing style from past articles, and indexes research sources. Use on first install or when redoing onboarding from scratch.
-allowed-tools: [Bash, Read, Write, Glob, Grep, AskUserQuestion]
+description: First-time setup for the Academic Writer. Configures researcher profile, analyzes writing style from past articles, indexes research sources, and offers Gemini onboarding. Supports a --quick flag for a fast path. Use on first install, when redoing onboarding from scratch, or when the user wants a quick onboarding (pass --quick).
+allowed-tools: [Bash, Read, Write, Glob, Grep, AskUserQuestion, mcp__gemini-api__gemini_raw]
 ---
 
 # Auto-generated from skills/init/SKILL.md
@@ -8,17 +8,35 @@ allowed-tools: [Bash, Read, Write, Glob, Grep, AskUserQuestion]
 
 # Academic Writer — Initialization Wizard
 
-Personalized onboarding that creates your researcher profile, detects available integrations, analyzes your writing style, and indexes your research sources.
+Personalized onboarding that creates your researcher profile, detects available integrations, analyzes your writing style, indexes your research sources, and optionally wires up Gemini as a prose writer.
 
-## The Five Phases
+## Quick Mode
 
-| Phase | What | Output |
-|-------|------|--------|
-| 0. Preflight | Create folders, detect existing profile | Workspace ready |
-| 1. Integrations | Auto-detect tools, let you choose | `tools` config |
-| 2. Profile | Field, language, citation style | Core profile |
-| 3. Style Analysis | Read past articles, build fingerprint | `styleFingerprint` + `articleStructure` |
-| 4. Sources | Index Candlekeep library | `sources` array |
+Invoke as `/academic-writer:init --quick` for a fast onboarding path. Quick mode:
+
+- **Runs**: Phase 0 (Preflight), Phase 1 (Integration Detection), Phase 2 (Researcher Profile,
+  including the `author_key` step), Phase 3.5 (Gemini Onboarding).
+- **Downgrades**: Style Analysis (Phase 2 Step 4) becomes narrative-only — no computational
+  extraction, no Hebrew baseline fetch, no `extract-style-metrics.py`, and no Stage 1 voice
+  fingerprint chain (voice-miner → voice-distiller → voice-sync). The researcher can still describe
+  their style in free text if they wish, but nothing is computed.
+- **Skips entirely**: Phase 3 (Research Sources) — `sources` is saved as `[]`.
+
+Everywhere below, a phase or step marked "(skipped in --quick mode)" does not run when `--quick` is
+passed. Everything else runs identically in both modes. This mode replaces the old
+`/academic-writer:setup` command, which is now an internal thin wrapper — see
+`src/skills/setup/SKILL.md`.
+
+## The Phases
+
+| Phase | What | Output | Quick mode |
+|-------|------|--------|------------|
+| 0. Preflight | Create folders, detect existing profile | Workspace ready | Runs |
+| 1. Integrations | Auto-detect tools, let you choose | `tools` config | Runs |
+| 2. Profile | Field, language, citation style, author_key | Core profile | Runs |
+| 3.5. Gemini Onboarding | Optionally enable Gemini as prose writer | `gemini` config | Runs |
+| 3. Style Analysis | Read past articles, build fingerprint | `styleFingerprint` + `articleStructure` | Narrative-only, no computation (skipped in --quick mode: computational chain + voice fingerprint chain) |
+| 4. Sources | Index Candlekeep library | `sources` array | Skipped entirely in --quick mode |
 
 
 ## Phase 0: Preflight
@@ -80,12 +98,57 @@ After running detection (parallel batch), store the tool selection as the `tools
 
 ## Phase 2: Researcher Profile
 
-### Step 1 of 4 — Field of Study
+### Step 1 of 5 — Full Name & Author Key
+
+Check first whether a `name` field is already present in an existing profile (Phase 0). If not,
+ask:
+
+```python
+AskUserQuestion(questions=[{
+  "question": "What is your full name (as you'd like it to appear on articles)?",
+  "header": "Step 1 of 5 — Your Name",
+  "options": []
+}])
+```
+
+Derive `author_key` as a kebab-case slug of the name: lowercase, trim, replace runs of
+whitespace/punctuation with a single hyphen, strip leading/trailing hyphens. Example:
+"Yotam Fromm" → `yotam-fromm`.
+
+```bash
+python3 -c "
+import re, sys
+name = sys.argv[1]
+slug = re.sub(r'[^a-z0-9]+', '-', name.strip().lower()).strip('-')
+print(slug)
+" "FULL_NAME_HERE"
+```
+
+Confirm the derived slug with the user before saving — this key is stable across projects and used
+to key cross-project CandleKeep voice-profile lookups (see `src/skills/voice/voice-sync.sh`), so it
+should not change casually later:
+
+```python
+AskUserQuestion(questions=[{
+  "question": "Your author key will be `DERIVED_SLUG`. This stays stable across all your projects and links your voice profile to your name. Use it, or provide a custom slug?",
+  "header": "Confirm author key",
+  "options": [
+    {"label": "Use `DERIVED_SLUG`", "description": "Recommended — derived automatically from your name."},
+    {"label": "I'll provide a custom slug", "description": "You'll type a kebab-case slug of your choice."}
+  ],
+  "multiSelect": false
+}])
+```
+
+Store the final value as `author_key`. Store the full name as `name`.
+
+
+### Step 2 of 5 — Field of Study
 
 ```python
 AskUserQuestion(questions=[{
   "question": "What is your field of study and area of specialization?",
-  "header": "Step 1 of 4 — Field of Study",
+  "header": "Step 2 of 5 — Field of Study",
   "options": []
 }])
 ```
@@ -100,12 +163,12 @@ Show examples below the question:
 Record the free-text answer as `fieldOfStudy`.
 
 
-### Step 2 of 4 — Article Language
+### Step 3 of 5 — Article Language
 
 ```python
 AskUserQuestion(questions=[{
   "question": "What language will you write your articles in?",
-  "header": "Step 2 of 4 — Article Language",
+  "header": "Step 3 of 5 — Article Language",
   "options": [
     {
       "label": "Hebrew",
@@ -130,12 +193,12 @@ AskUserQuestion(questions=[{
 Store as `targetLanguage`. If "Other", ask for the language name with a follow-up `AskUserQuestion`.
 
 
-### Step 3 of 4 — Citation Style
+### Step 4 of 5 — Citation Style
 
 ```python
 AskUserQuestion(questions=[{
   "question": "Which citation style do you use in your academic work?",
-  "header": "Step 3 of 4 — Citation Style",
+  "header": "Step 4 of 5 — Citation Style",
   "options": [
     {
       "label": "Inline Parenthetical (Recommended for Hebrew)",
@@ -165,7 +228,7 @@ AskUserQuestion(questions=[{
 Map selection: Inline → `inline-parenthetical`, Chicago → `chicago`, MLA → `mla`, APA → `apa`.
 
 
-### Step 3b of 4 — Abstract Languages
+### Step 4b of 5 — Abstract Languages
 
 ```python
 AskUserQuestion(questions=[{
@@ -198,12 +261,15 @@ Store as `abstractLanguages` array:
 - No abstract → `[]`
 
 
-### Step 4 of 4 — Writing Style
+### Step 5 of 5 — Writing Style
+
+(In `--quick` mode this step still runs, but only the narrative confirm/skip choice — the
+computational extraction and Stage 1 voice fingerprint chain below are skipped in --quick mode.)
 
 ```python
 AskUserQuestion(questions=[{
   "question": "To write articles that sound like you, I need to analyze your past work. Have you added papers to the past-articles/ folder?",
-  "header": "Step 4 of 4 — Writing Style",
+  "header": "Step 5 of 5 — Writing Style",
   "options": [
     {
       "label": "Yes, my papers are ready",
@@ -226,13 +292,30 @@ AskUserQuestion(questions=[{
 ls past-articles/
 ```
 
+**(skipped in --quick mode)** The Computational extraction step and the Stage 1 voice fingerprint
+chain below do not run in `--quick` mode. In quick mode, do only a lightweight narrative pass:
+read a couple of files and describe style qualitatively (categories D, F, G below), then save that
+narrative under `## Style Fingerprint` in Phase 4 as free text instead of the full JSON object.
+
 **Step 1: Computational extraction** — Run the metrics extraction script to get hard numbers.
 
-First fetch the **shared Hebrew baseline** from CandleKeep (book *Hebrew Linguistic Reference*, mirrored on GitHub at [yodem/hebrew-linguistics-data](https://github.com/yodem/hebrew-linguistics-data); the same book is read by the `hebrew-book-producer` plugin so both share one source of truth):
+First fetch the **shared Hebrew baseline** from CandleKeep (item titled *Hebrew Linguistic
+Reference*, mirrored on GitHub at
+[yodem/hebrew-linguistics-data](https://github.com/yodem/hebrew-linguistics-data); the same item is
+read by the `hebrew-book-producer` plugin so both share one source of truth). Look it up by exact
+title rather than a hardcoded id — ids can drift if the item is ever recreated:
 
 ```bash
 mkdir -p .ctx
-ck items get cmomjonvy0fdmk30zwef79c48 > .ctx/hebrew-linguistic-reference.md
+BASELINE_TITLE="Hebrew Linguistic Reference"
+BASELINE_ID=$(ck items list --json 2>/dev/null | jq -r --arg t "$BASELINE_TITLE" '[.[] | select(.title == $t)] | if length == 1 then .[0].id elif length > 1 then (sort_by(.id) | .[0].id) else empty end')
+if [ -n "$BASELINE_ID" ]; then
+  ck items get "$BASELINE_ID" > .ctx/hebrew-linguistic-reference.md
+else
+  echo "Could not find CandleKeep item titled '$BASELINE_TITLE' by exact title match."
+  echo "Search CandleKeep manually (ck items list --json | jq) and either rename the item to match exactly, or fall back to the last-known id below (brittle, may be stale/wrong):"
+  echo "  ck items get cmomjonvy0fdmk30zwef79c48 > .ctx/hebrew-linguistic-reference.md"
+fi
 ```
 
 Then run the extractor:
@@ -254,7 +337,7 @@ Read the results:
 cat /tmp/style-metrics.json
 ```
 
-This gives you 30+ numerical metrics (sentence length, passive voice, transitions, etc.) and contrastive scores showing what's distinctive about this researcher vs. baseline academic Hebrew.
+This gives you 30+ numerical metrics (sentence length, passive voice, transitions, etc.) and contrastive scores showing what's distinctive about this researcher vs. baseline academic Hebrew. It also includes a `frequentTerms` field — the researcher's own top-N high-frequency content vocabulary (count/length controlled by `thresholds.json > typography.styleMetrics.topFrequentTermsCount` / `minTermLength`). Keep `frequentTerms` in the fingerprint object as-is when you assemble the `## Style Fingerprint` JSON block in Phase 4 below — it steers the section-writer toward the researcher's own established terminology instead of generic phrasing (see `style-fingerprint-rubric.md § Preferred Terminology`).
 
 **Step 2: Text extraction for qualitative analysis** — For each file, extract text:
 - PDF: `python3 -c "import sys; import pdfplumber; [print(p.extract_text()) for p in pdfplumber.open(sys.argv[1]).pages]" past-articles/FILENAME 2>/dev/null || strings past-articles/FILENAME | head -500`
@@ -283,18 +366,170 @@ Full rubric (all 30 dimensions across 8 categories A–I): see `references/profi
 
 ### Stage 1 voice fingerprint
 
+**(skipped in --quick mode)**
+
 After past-articles are scanned, invoke the `voice-miner` agent:
 
 1. Run `voice-miner` agent on `past-articles/`. Output is `.voice/fingerprint.md`.
-2. Run `voice-distiller --from-fingerprint` to seed the four-section `AUTHOR_VOICE.md` at root.
-3. Run `voice-sync push`.
-4. Print: "✓ Voice fingerprint created from N past articles. You can write articles now, or run
+2. **Check for `NEEDS CORPUS`** before proceeding:
+   ```bash
+   grep -q "NEEDS CORPUS" .voice/fingerprint.md && echo "STUB" || echo "VALID"
+   ```
+   If `STUB`: skip steps 3–5 below entirely and tell the user: "Not enough past articles yet for a
+   voice fingerprint (need at least `thresholds.json: voice.corpus.minArticles` articles /
+   `voice.corpus.minTotalWords` words — see `src/thresholds.json`). Add more to `past-articles/` and
+   re-run `/academic-writer:init`, or skip voice for now." Then continue to Phase 3.5/Phase 3
+   without a voice fingerprint.
+3. If `VALID`: run `voice-distiller --from-fingerprint` to seed the four-section
+   `AUTHOR_VOICE.md` at root.
+4. **Check that `AUTHOR_VOICE.md` was actually produced** before syncing:
+   ```bash
+   [ -s AUTHOR_VOICE.md ] && echo "PRESENT" || echo "MISSING"
+   ```
+   If `MISSING`: print "voice-distiller did not produce AUTHOR_VOICE.md — skipping voice-sync push.
+   Re-run voice-miner/voice-distiller manually once past-articles/ has enough content." and skip
+   step 5.
+5. If `PRESENT`: run `voice-sync push` (this requires `author_key` to already be saved in
+   `.academic-helper/profile.md` — see Phase 4 below; run Phase 4 first if needed, or rely on
+   voice-sync's own loud failure if `author_key` is missing).
+6. Print: "✓ Voice fingerprint created from N past articles. You can write articles now, or run
    `/academic-writer:voice` for a deeper profile (recommended)."
 
 The user is not required to run Stage 2. They can start writing immediately with the fingerprint.
 
 
+## Phase 3.5: Gemini Onboarding
+
+Runs in both full and `--quick` modes. Ask the researcher whether to enable Gemini as the prose
+writer for `/write`, `/edit`, and `/edit-section`. Claude remains the orchestrator and citation
+auditor either way.
+
+```python
+AskUserQuestion(questions=[{
+  "question": "Enable Gemini as the prose writer? Claude stays in charge of orchestration and citation audits — Gemini drafts and self-reviews paragraphs.",
+  "header": "Optional — Gemini integration",
+  "options": [
+    {
+      "label": "Yes, enable Gemini",
+      "description": "Requires a Google AI Studio API key (free tier available).",
+      "markdown": "```\nGemini ON\n─────────\n→ Faster, lower-cost drafting\n→ Per-language calibration gate runs\n   on first /write in each language\n→ Auditor still runs on Claude\n```"
+    },
+    {
+      "label": "No, Claude only",
+      "description": "Today's behavior — Claude writes and reviews everything.",
+      "markdown": "```\nClaude only\n───────────\n→ No external API needed\n→ You can enable Gemini later via init\n```"
+    }
+  ],
+  "multiSelect": false
+}])
+```
+
+### If "No, Claude only"
+
+Skip the rest of this phase. Note in summary that Gemini is disabled.
+
+### If "Yes, enable Gemini"
+
+#### Step 3.5.a — Check for existing key
+
+```bash
+if [ -n "$GOOGLE_API_KEY" ]; then
+  echo "Found GOOGLE_API_KEY in environment."
+elif [ -f .academic-helper/secrets.json ] && python3 -c "import json,sys; sys.exit(0 if json.load(open('.academic-helper/secrets.json')).get('GOOGLE_API_KEY') else 1)" 2>/dev/null; then
+  echo "Found GOOGLE_API_KEY in .academic-helper/secrets.json."
+else
+  echo "NO_KEY"
+fi
+```
+
+#### Step 3.5.b — If NO_KEY, walk through key creation
+
+> "To get a Google AI Studio API key:
+> 1. Open https://aistudio.google.com/apikey in your browser
+> 2. Sign in with a Google account
+> 3. Click 'Create API key' — copy the key (it begins with `AIza...`)
+> 4. Free tier covers typical academic-writer usage."
+
+Ask how to store the key:
+
+```python
+AskUserQuestion(questions=[{
+  "question": "Where should I store your Gemini API key?",
+  "header": "Key storage",
+  "options": [
+    {
+      "label": "Environment variable (recommended)",
+      "description": "Set GOOGLE_API_KEY in your shell profile. Survives across projects.",
+      "markdown": "```\nexport GOOGLE_API_KEY=\"AIza...\"\n# add to ~/.zshrc or ~/.bashrc\n```"
+    },
+    {
+      "label": "Project-local secrets file",
+      "description": ".academic-helper/secrets.json (gitignored, this project only).",
+      "markdown": "```\n.academic-helper/secrets.json\n──────────────────────────────\n{ \"GOOGLE_API_KEY\": \"AIza...\" }\n→ Already in .gitignore\n```"
+    }
+  ],
+  "multiSelect": false
+}])
+```
+
+- **Env var path**: print the export command for the user to run. Then ask them to confirm they've set it and reopened the session so Claude Code picks up the env. You cannot set their shell env from inside Claude Code.
+- **Secrets file path**: ask them to paste the key, then:
+
+```bash
+mkdir -p .academic-helper
+python3 -c "
+import json, pathlib, os
+p = pathlib.Path('.academic-helper/secrets.json')
+data = json.loads(p.read_text()) if p.exists() else {}
+data['GOOGLE_API_KEY'] = os.environ['_PASTED_KEY']
+p.write_text(json.dumps(data, indent=2))
+import stat
+p.chmod(stat.S_IRUSR | stat.S_IWUSR)
+"
+```
+
+(Pass the pasted key via env var to avoid leaking it through shell history.) Confirm `.academic-helper/secrets.json` is gitignored.
+
+#### Step 3.5.c — Probe the key
+
+Run a one-shot probe through the MCP server to verify the key works end-to-end:
+
+```
+mcp__gemini-api__gemini_raw({
+  system: "Reply with exactly the word PONG and nothing else.",
+  prompt: "PING"
+})
+```
+
+- On success (returned `text` contains "PONG"): print "✓ Gemini API key verified."
+- On `{ error: { code: "no_credentials" } }`: print "Key not detected by the MCP server. If you just set the env var, restart Claude Code so the server inherits it. Re-run `/academic-writer:init` after restart."
+- On any other error: print the error and tell the user Gemini will not be available until resolved.
+
+#### Step 3.5.d — Note the calibration gate
+
+> "On your first `/academic-writer:write` in each language, a calibration gate will run:
+> - You'll see one Claude paragraph and one Gemini paragraph on the same topic
+> - You approve or reject Gemini for that language
+> - Approved languages are stored in your profile under `gemini.approvedLanguages`."
+
+#### Step 3.5.e — Store Gemini settings
+
+The `## Gemini` block in `profile.md` (written in Phase 4 below) will include:
+
+```json
+{
+  "enabled": true,
+  "approvedLanguages": [],
+  "models": {}
+}
+```
+
+If the researcher chose "No, Claude only": `enabled: false`, no `approvedLanguages`.
+
+
 ## Phase 3: Research Sources
+
+**(skipped entirely in --quick mode — `sources` is saved as `[]`)**
 
 **If Candlekeep is enabled:**
 
@@ -343,6 +578,8 @@ Use the Write tool to save `.academic-helper/profile.md`:
 ```markdown
 # Academic Writer Profile
 
+name: FULL_NAME_HERE
+author_key: kebab-case-slug
 fieldOfStudy: FIELD_HERE
 citationStyle: inline-parenthetical
 targetLanguage: Hebrew
@@ -369,7 +606,7 @@ updatedAt: ISO_TIMESTAMP
 ## Style Fingerprint
 
 ```json
-{ ... full 25-dimension fingerprint object ... }
+{ ... full 25-dimension fingerprint object, including computationalMetrics.frequentTerms from Step 1's extractor output when computational extraction ran ... }
 ` ` `
 
 ## Article Structure
@@ -383,9 +620,21 @@ updatedAt: ISO_TIMESTAMP
 ```json
 []
 ` ` `
+
+## Gemini
+
+```json
+{
+  "enabled": true,
+  "approvedLanguages": [],
+  "models": {}
+}
+` ` `
 ```
 
-(Replace ` ` ` with actual backtick triplets when writing the file.)
+(Replace ` ` ` with actual backtick triplets when writing the file.) `## Gemini` reflects the
+outcome of Phase 3.5: `enabled: false` (no `approvedLanguages`/`models` keys) if the researcher
+chose "No, Claude only".
 
 
 

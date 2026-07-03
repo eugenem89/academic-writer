@@ -52,3 +52,14 @@ Write `.voice/fingerprint.md` only. Never write `AUTHOR_VOICE.md` — that is th
 
 - Empty/unreadable corpus → write stub flagged `> NEEDS CORPUS`; do not error.
 - Mixed-language corpus → run analyses per-language and report both; do not merge stats.
+- The `> NEEDS CORPUS` marker in the output is a signal the caller MUST check before proceeding to
+  voice-distiller — do not treat a stub as a valid fingerprint. Callers (e.g. `init`'s Stage 1 voice
+  fingerprint chain) grep for `NEEDS CORPUS` in `.voice/fingerprint.md` and stop before invoking
+  voice-distiller if it is present.
+
+## Cross-project identity
+
+This agent only produces the local corpus fingerprint (`.voice/fingerprint.md`) — that artifact is
+local-only. The eventual `AUTHOR_VOICE.md` sync to CandleKeep (done later by voice-distiller +
+voice-sync) is keyed by `author_key` from `.academic-helper/profile.md`, so multiple projects by the
+same author converge on one CandleKeep book titled `Voice Profile — <author_key>`.

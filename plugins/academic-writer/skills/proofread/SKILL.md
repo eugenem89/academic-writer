@@ -4,7 +4,7 @@ description: "Mechanical proofreading (הגהה) pass over a finished article �
 user-invocable: true
 allowedTools: [Bash, Read, Write, Edit, Glob, Grep, Agent, AskUserQuestion]
 agents: [proofreader]
-metadata: {author: "Yotam Fromm", version: "0.2.0"}
+metadata: {author: "Yotam Fromm", version: "0.2.1"}
 ---
 
 # Academic Writer — Proofread (הגהה)
@@ -63,6 +63,8 @@ Each change is one of:
 |---|---|
 | `typo`, `punctuation`, `word`, `grammar`, `typography` | **mechanical — applied** (subject to the citation-integrity guard below) |
 | `idea-flag` | **never applied** — reported only |
+
+**Colloquial/non-academic terminology is a valid `idea-flag` trigger, never a mechanical fix.** If the proofreader notices a clearly colloquial term where academic register is expected (see the colloquial→academic tables in `plugins/academic-writer/skills/write/references/academic-terminology-english.md` § E and `academic-terminology-hebrew.md` § ה for examples of the register gap), it may raise an `idea-flag` noting the term and pointing at the register issue — but it must **never** rewrite the wording itself. Register/tone substitution stays out of proofread's mechanical scope (see "Out of your scope" in `agents/proofreader.md`); flagging it for the researcher's attention is in scope precisely because it changes nothing.
 
 ## Step 4 — Citation-integrity guard (differential, deterministic)
 

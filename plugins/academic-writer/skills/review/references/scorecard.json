@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "version": "1.0",
+  "version": "1.1",
   "description": "6-dimension self-review scorecard for completed academic articles. Each dimension scores 0-10. Total >= 40/60 = pass.",
   "dimensions": [
     {
@@ -98,11 +98,12 @@
         "Linking words used in correct semantic context",
         "Paragraph length appropriate (not too short, not too long)",
         "Formal register maintained throughout",
-        "Transitions between sections smooth"
+        "Transitions between sections smooth",
+        "Terminology register is academic, not colloquial — hedging, argumentation, citation-introduction, and transition vocabulary drawn from academic-terminology-{lang}.md rather than generic or colloquial substitutes"
       ],
       "scoreGuide": {
-        "10": "Rich variety of connectors, appropriate lengths, smooth transitions",
-        "1": "Repetitive connectors, choppy transitions"
+        "10": "Rich variety of connectors, appropriate lengths, smooth transitions, consistently academic-register terminology",
+        "1": "Repetitive connectors, choppy transitions, colloquial terminology throughout"
       }
     }
   ],
