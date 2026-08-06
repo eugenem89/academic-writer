@@ -18,7 +18,7 @@ Those phases have been consolidated into `init` to remove drift between the two 
 /academic-writer:init --quick
 ```
 
-See `src/skills/init/SKILL.md`'s **"## Quick Mode"** section for exactly what quick mode runs and
+See `${CLAUDE_PLUGIN_ROOT}/skills/init/SKILL.md`'s **"## Quick Mode"** section for exactly what quick mode runs and
 skips: it runs Preflight, Integration Detection, Profile (including the `author_key` step), and
 Gemini Onboarding; it downgrades Style Analysis to narrative-only; it skips Research Sources
 entirely.
@@ -28,4 +28,4 @@ entirely.
 Kept as a discoverability breadcrumb and to preserve the skill id in case any external reference
 (docs, muscle memory) still points at `setup`. It is not registered as a slash command
 (`user-invocable: false`) and has no phase logic of its own — do not add any here. All onboarding
-logic lives in `src/skills/init/SKILL.md`.
+logic lives in `${CLAUDE_PLUGIN_ROOT}/skills/init/SKILL.md`.

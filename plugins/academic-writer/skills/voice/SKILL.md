@@ -17,7 +17,7 @@ Voice sync is keyed by the profile.md `author_key` field (`.academic-helper/prof
 free-text writer name. CandleKeep is the canonical cross-project store: per the plugin's no-`$HOME`
 rule (see root `CLAUDE.md`), the plugin cannot write a local cross-project file outside the current
 project, so CandleKeep — under a book titled `Voice Profile — <author_key>` — is the only
-cross-project persistence mechanism. `src/skills/voice/voice-sync.sh` resolves `author_key` from
+cross-project persistence mechanism. `${CLAUDE_PLUGIN_ROOT}/skills/voice/voice-sync.sh` resolves `author_key` from
 `.academic-helper/profile.md` and fails loudly (exit 1, no silent fallback) if it is missing; run
 `/academic-writer:init` to set it.
 

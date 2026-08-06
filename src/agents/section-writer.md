@@ -124,7 +124,7 @@ m = re.search(r'## Style Fingerprint\n+\x60\x60\x60json\n(.*?)\n\x60\x60\x60', c
 print(m.group(1) if m else 'null')
 "
 # Load linking words reference
-cat plugins/academic-writer/words.md
+cat ${CLAUDE_PLUGIN_ROOT}/words.md
 # Load bibliographic source registry (written by deep-reader)
 cat .academic-helper/sources.json 2>/dev/null || echo "[]"
 # Load evidence ownership map (written by architect)
@@ -224,7 +224,7 @@ For each returned paragraph, run the existing typography detector to scrub em-da
 ```bash
 for each paragraph i:
   TYPO_REPORT=$(mktemp)
-  echo "$PARAGRAPH_TEXT" | python3 plugins/academic-writer/scripts/detect-ai-typography.py \
+  echo "$PARAGRAPH_TEXT" | python3 ${CLAUDE_PLUGIN_ROOT}/scripts/detect-ai-typography.py \
     --fix-and-output \
     --json > "$TYPO_REPORT"
   FIXED_TEXT=$(python3 -c "import json; d=json.load(open('$TYPO_REPORT')); print(d.get('fixed_text', ''))")
@@ -352,7 +352,7 @@ ck items read "DOC_ID:PAGE_START-PAGE_END"
 
 #### Skill 2: STYLE FINGERPRINT COMPLIANCE
 
-**Re-read the full `styleFingerprint` before every check.** Full 10-dimension rubric: see `plugins/academic-writer/skills/write/references/style-fingerprint-rubric.md`. When `styleFingerprint.computationalMetrics.frequentTerms` is present, prefer the researcher's own established terms from that list over generic phrasing whenever both are academically appropriate — see the rubric's "Preferred Terminology" note.
+**Re-read the full `styleFingerprint` before every check.** Full 10-dimension rubric: see `${CLAUDE_PLUGIN_ROOT}/skills/write/references/style-fingerprint-rubric.md`. When `styleFingerprint.computationalMetrics.frequentTerms` is present, prefer the researcher's own established terms from that list over generic phrasing whenever both are academically appropriate — see the rubric's "Preferred Terminology" note.
 
 **Banned-terms sweep:** parse `bannedTerms` block. For each match: replace using `replacements[0]` (or context-best); if `replacements` empty, remove the sentence. Mandatory before Skill 3.
 
@@ -374,7 +374,7 @@ Zero tolerance for embedded foreign text in running prose. Allowed: author names
 
 ```bash
 TYPO_REPORT=$(mktemp)
-echo "$PARAGRAPH_TEXT" | python3 plugins/academic-writer/scripts/detect-ai-typography.py --fix-and-output --json > "$TYPO_REPORT"
+echo "$PARAGRAPH_TEXT" | python3 ${CLAUDE_PLUGIN_ROOT}/scripts/detect-ai-typography.py --fix-and-output --json > "$TYPO_REPORT"
 FIXED_TEXT=$(python3 -c "import json; d=json.load(open('$TYPO_REPORT')); print(d.get('fixed_text', ''))")
 if [ -n "$FIXED_TEXT" ] && [ "$FIXED_TEXT" != "$PARAGRAPH_TEXT" ]; then
   PARAGRAPH_TEXT="$FIXED_TEXT"
@@ -388,8 +388,8 @@ Load the anti-AI pattern reference for the article's `targetLanguage`:
 
 ```bash
 LANG_LOWER=$(echo "$TARGET_LANGUAGE" | tr '[:upper:]' '[:lower:]')
-REF_FILE="plugins/academic-writer/skills/write/references/anti-ai-patterns-${LANG_LOWER}.md"
-if [ -f "$REF_FILE" ]; then cat "$REF_FILE"; else cat plugins/academic-writer/skills/write/references/anti-ai-patterns-hebrew.md; fi
+REF_FILE="${CLAUDE_PLUGIN_ROOT}/skills/write/references/anti-ai-patterns-${LANG_LOWER}.md"
+if [ -f "$REF_FILE" ]; then cat "$REF_FILE"; else cat ${CLAUDE_PLUGIN_ROOT}/skills/write/references/anti-ai-patterns-hebrew.md; fi
 ```
 
 Also load the **positive terminology reference** for the same language — this is the "what to
@@ -397,8 +397,8 @@ reach for" companion to the anti-AI "what to avoid" list above. Consult it befor
 drafting/rewriting, not only when a violation is flagged:
 
 ```bash
-TERM_FILE="plugins/academic-writer/skills/write/references/academic-terminology-${LANG_LOWER}.md"
-if [ -f "$TERM_FILE" ]; then cat "$TERM_FILE"; else cat plugins/academic-writer/skills/write/references/academic-terminology-hebrew.md; fi
+TERM_FILE="${CLAUDE_PLUGIN_ROOT}/skills/write/references/academic-terminology-${LANG_LOWER}.md"
+if [ -f "$TERM_FILE" ]; then cat "$TERM_FILE"; else cat ${CLAUDE_PLUGIN_ROOT}/skills/write/references/academic-terminology-hebrew.md; fi
 ```
 
 Score the cleaned paragraph on 5 dimensions (each 1-10): directness, rhythm, trust, authenticity, density. Apply the named patterns table from the reference. Threshold from `thresholds.json` (default 35/50). If below, rewrite the flagged portions, preferring hedging verbs, argumentation connectives, citation-introduction verbs, and transition phrases from the positive terminology reference over generic or colloquial substitutes.

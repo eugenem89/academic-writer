@@ -25,7 +25,7 @@ Invoke as `/academic-writer:init --quick` for a fast onboarding path. Quick mode
 Everywhere below, a phase or step marked "(skipped in --quick mode)" does not run when `--quick` is
 passed. Everything else runs identically in both modes. This mode replaces the old
 `/academic-writer:setup` command, which is now an internal thin wrapper — see
-`src/skills/setup/SKILL.md`.
+`${CLAUDE_PLUGIN_ROOT}/skills/setup/SKILL.md`.
 
 ## The Phases
 
@@ -128,7 +128,7 @@ print(slug)
 ```
 
 Confirm the derived slug with the user before saving — this key is stable across projects and used
-to key cross-project CandleKeep voice-profile lookups (see `src/skills/voice/voice-sync.sh`), so it
+to key cross-project CandleKeep voice-profile lookups (see `${CLAUDE_PLUGIN_ROOT}/skills/voice/voice-sync.sh`), so it
 should not change casually later:
 
 ```python
@@ -329,7 +329,7 @@ fi
 Then run the extractor:
 
 ```bash
-python3 plugins/academic-writer/scripts/extract-style-metrics.py \
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/extract-style-metrics.py \
   --input past-articles/ \
   --aggregate \
   --baseline .ctx/hebrew-linguistic-reference.md \
@@ -386,7 +386,7 @@ After past-articles are scanned, invoke the `voice-miner` agent:
    ```
    If `STUB`: skip steps 3–5 below entirely and tell the user: "Not enough past articles yet for a
    voice fingerprint (need at least `thresholds.json: voice.corpus.minArticles` articles /
-   `voice.corpus.minTotalWords` words — see `src/thresholds.json`). Add more to `past-articles/` and
+   `voice.corpus.minTotalWords` words — see `${CLAUDE_PLUGIN_ROOT}/thresholds.json`). Add more to `past-articles/` and
    re-run `/academic-writer:init`, or skip voice for now." Then continue to Phase 3.5/Phase 3
    without a voice fingerprint.
 3. If `VALID`: run `voice-distiller --from-fingerprint` to seed the four-section

@@ -10,7 +10,7 @@
 >
 > Where the anti-ai and banned-terms files tell the writer what to strike, this file tells the
 > writer what to reach for instead — genuine, discipline-appropriate Humanities academic register
-> in English. It is loaded by the section-writer (`src/agents/section-writer.md`) and by the
+> in English. It is loaded by the section-writer (`${CLAUDE_PLUGIN_ROOT}/agents/section-writer.md`) and by the
 > Gemini `write-section` prompt's calibration bundle, for articles where `targetLanguage` is
 > English. Consult it before and while drafting, not as a post-hoc find-and-replace pass.
 

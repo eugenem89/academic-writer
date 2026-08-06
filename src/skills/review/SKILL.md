@@ -42,7 +42,7 @@ When invoked as a pipeline step, the article text is passed directly.
 The 6-dimension scorecard is defined in `references/scorecard.json` (machine-readable, versioned). Read that file at the start of every review:
 
 ```bash
-cat plugins/academic-writer/skills/review/references/scorecard.json
+cat ${CLAUDE_PLUGIN_ROOT}/skills/review/references/scorecard.json
 ```
 
 For each dimension:
@@ -65,11 +65,11 @@ print(m.group(1) if m else 'null')
 
 And load linking words reference and the positive terminology reference for Academic Conventions (dimension 6) — the terminology file's language-specific variant is picked from the article's `targetLanguage` (read from `.academic-helper/profile.md`'s frontmatter, e.g. `targetLanguage: Hebrew`; fall back to the English file if the language-specific file is missing):
 ```bash
-cat plugins/academic-writer/words.md
+cat ${CLAUDE_PLUGIN_ROOT}/words.md
 LANG_LOWER=$(grep -m1 '^targetLanguage:' .academic-helper/profile.md 2>/dev/null | sed 's/^targetLanguage:[[:space:]]*//' | tr '[:upper:]' '[:lower:]')
 LANG_LOWER=${LANG_LOWER:-hebrew}
-TERM_FILE="plugins/academic-writer/skills/write/references/academic-terminology-${LANG_LOWER}.md"
-if [ -f "$TERM_FILE" ]; then cat "$TERM_FILE"; else cat plugins/academic-writer/skills/write/references/academic-terminology-hebrew.md; fi
+TERM_FILE="${CLAUDE_PLUGIN_ROOT}/skills/write/references/academic-terminology-${LANG_LOWER}.md"
+if [ -f "$TERM_FILE" ]; then cat "$TERM_FILE"; else cat ${CLAUDE_PLUGIN_ROOT}/skills/write/references/academic-terminology-hebrew.md; fi
 ```
 
 Score the "Terminology register" criterion in dimension 6 by checking whether hedging, argumentation, citation-introduction, and transition vocabulary in the article matches the register modeled in that file rather than colloquial substitutes — see the table in `academic-terminology-{lang}.md § E` for common colloquial→academic swaps to watch for.

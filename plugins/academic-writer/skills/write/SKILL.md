@@ -158,10 +158,6 @@ If the file does not exist, proceed with Phase 1 normally.
 
 
 ```bash
-# Validate wf_write_article has nodes — if empty, re-register from plugin cache
-if [ "$_AW_NODES" -eq 0 ]; then
-  _AW_DIR=$(find ~/.claude/plugins/cache -name "wf_write_article.json" -path "*/workflows/*" 2>/dev/null | head -1 | xargs dirname 2>/dev/null)
-fi
 echo '{"subject": "pending", "phase": "conversational"}' > /tmp/aw-run-input.json
 ```
 
@@ -402,11 +398,11 @@ For each writer unit in the approved outline, the Agent tool prompt must include
 
 **NOTE:** Do NOT pass `styleFingerprint`, `linkingWords`, `sourcesRegistry`, or `evidenceOwnership` in the prompt — section-writer agents load all four directly from disk to reduce context size:
 - Fingerprint from `.academic-helper/profile.md`
-- Linking words from `plugins/academic-writer/words.md`
+- Linking words from `${CLAUDE_PLUGIN_ROOT}/words.md`
 - Source registry from `.academic-helper/sources.json` (deep-reader output)
 - Evidence ownership map from `.academic-helper/evidence-ownership.json` (architect output)
 
-Each section-writer handles a **per-paragraph 8-skill pipeline** internally — in order: Draft → Style Compliance → Hebrew Grammar → Academic Language → Language Purity → Anti-AI → Repetition Check → Citation Audit (logged per paragraph as `section_N_p_M_<skill>`). The authoritative contract for that pipeline — exact skill behavior, the 220-word ceiling, the `thresholds.json`-driven anti-AI gate, and the auditor hard gate (Citation Audit / Skill 8) — lives in the `section-writer` agent definition (`src/agents/section-writer.md`). Do not duplicate or override it here; the orchestrator only spawns section-writers and waits for their results.
+Each section-writer handles a **per-paragraph 8-skill pipeline** internally — in order: Draft → Style Compliance → Hebrew Grammar → Academic Language → Language Purity → Anti-AI → Repetition Check → Citation Audit (logged per paragraph as `section_N_p_M_<skill>`). The authoritative contract for that pipeline — exact skill behavior, the 220-word ceiling, the `thresholds.json`-driven anti-AI gate, and the auditor hard gate (Citation Audit / Skill 8) — lives in the `section-writer` agent definition (`${CLAUDE_PLUGIN_ROOT}/agents/section-writer.md`). Do not duplicate or override it here; the orchestrator only spawns section-writers and waits for their results.
 
 After receiving each section-writer result (per writer unit), mark node complete:
 
@@ -580,7 +576,7 @@ Write the article data to a JSON file, then run the standalone DOCX generator sc
 2. **Generate the DOCX:**
 
 ```bash
-python3 plugins/academic-writer/scripts/generate-docx.py --input /tmp/aw-article-data.json --output "$DOCX_PATH"
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/generate-docx.py --input /tmp/aw-article-data.json --output "$DOCX_PATH"
 ```
 
 The script handles all RTL formatting, directional marks, citation parentheses splitting, and conditional section titles deterministically.

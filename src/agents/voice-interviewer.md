@@ -19,8 +19,7 @@ any prior transcripts, and conduct an adversarial interview in chat with the use
 - Session number and category name (provided by orchestrator)
 - `.voice/fingerprint.md` (read once at start)
 - Prior session transcripts under `.voice/interview/` (read for context, do not duplicate questions)
-- Seed question bank: `src/skills/voice/questions-academic.md` (Academic Helper) or
-  `plugins/hebrew-book-producer/skills/voice/questions-non-fiction.md`
+- Seed question bank: `${CLAUDE_PLUGIN_ROOT}/skills/voice/questions-academic.md`
 
 ## Outputs
 
