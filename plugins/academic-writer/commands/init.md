@@ -25,7 +25,7 @@ Invoke as `/academic-writer:init --quick` for a fast onboarding path. Quick mode
 Everywhere below, a phase or step marked "(skipped in --quick mode)" does not run when `--quick` is
 passed. Everything else runs identically in both modes. This mode replaces the old
 `/academic-writer:setup` command, which is now an internal thin wrapper — see
-`src/skills/setup/SKILL.md`.
+`${CLAUDE_PLUGIN_ROOT}/skills/setup/SKILL.md`.
 
 ## The Phases
 
@@ -125,7 +125,7 @@ print(slug)
 ```
 
 Confirm the derived slug with the user before saving — this key is stable across projects and used
-to key cross-project CandleKeep voice-profile lookups (see `src/skills/voice/voice-sync.sh`), so it
+to key cross-project CandleKeep voice-profile lookups (see `${CLAUDE_PLUGIN_ROOT}/skills/voice/voice-sync.sh`), so it
 should not change casually later:
 
 ```python
@@ -299,11 +299,16 @@ narrative under `## Style Fingerprint` in Phase 4 as free text instead of the fu
 
 **Step 1: Computational extraction** — Run the metrics extraction script to get hard numbers.
 
-First fetch the **shared Hebrew baseline** from CandleKeep (item titled *Hebrew Linguistic
+**Optional, best-effort, Hebrew only:** if `targetLanguage` is Hebrew, first try to fetch the
+**shared Hebrew baseline** from CandleKeep for a contrastive score (item titled *Hebrew Linguistic
 Reference*, mirrored on GitHub at
 [yodem/hebrew-linguistics-data](https://github.com/yodem/hebrew-linguistics-data); the same item is
-read by the `hebrew-book-producer` plugin so both share one source of truth). Look it up by exact
-title rather than a hardcoded id — ids can drift if the item is ever recreated:
+read by the `hebrew-book-producer` plugin so both share one source of truth). **Skip this whole
+step if `targetLanguage` is not Hebrew, OR if `tools.candlekeep.enabled` is false, OR if no
+CandleKeep CLI/tool is present** — the baseline is a nice-to-have contrastive signal, not a
+requirement, and the extractor runs fine without it (see below). Look it up by exact title rather
+than a hardcoded id — ids can drift if the item is ever recreated, and there is no fallback id to
+fall back to:
 
 ```bash
 mkdir -p .ctx
@@ -312,20 +317,26 @@ BASELINE_ID=$(ck items list --json 2>/dev/null | jq -r --arg t "$BASELINE_TITLE"
 if [ -n "$BASELINE_ID" ]; then
   ck items get "$BASELINE_ID" > .ctx/hebrew-linguistic-reference.md
 else
-  echo "Could not find CandleKeep item titled '$BASELINE_TITLE' by exact title match."
-  echo "Search CandleKeep manually (ck items list --json | jq) and either rename the item to match exactly, or fall back to the last-known id below (brittle, may be stale/wrong):"
-  echo "  ck items get cmomjonvy0fdmk30zwef79c48 > .ctx/hebrew-linguistic-reference.md"
+  echo "Could not find CandleKeep item titled '$BASELINE_TITLE' by exact title match — continuing without a contrastive baseline (non-fatal)."
+  echo "If you want contrastive scoring, search CandleKeep manually (ck items list --json | jq) and rename the item to match exactly, or re-run init after adding it."
 fi
 ```
 
-Then run the extractor:
+Then run the extractor. Pass `--baseline`/`--contrastive` only when the baseline file above was
+successfully fetched — the extractor degrades gracefully and simply omits the contrastive section
+when no baseline is present, so this is safe to skip entirely for non-Hebrew articles or when
+CandleKeep isn't configured:
 
 ```bash
-python3 plugins/academic-writer/scripts/extract-style-metrics.py \
+if [ -f .ctx/hebrew-linguistic-reference.md ]; then
+  BASELINE_ARGS="--baseline .ctx/hebrew-linguistic-reference.md --contrastive"
+else
+  BASELINE_ARGS=""
+fi
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/extract-style-metrics.py \
   --input past-articles/ \
   --aggregate \
-  --baseline .ctx/hebrew-linguistic-reference.md \
-  --contrastive \
+  $BASELINE_ARGS \
   --json \
   --output /tmp/style-metrics.json
 ```
@@ -339,8 +350,8 @@ cat /tmp/style-metrics.json
 
 This gives you 30+ numerical metrics (sentence length, passive voice, transitions, etc.) and contrastive scores showing what's distinctive about this researcher vs. baseline academic Hebrew. It also includes a `frequentTerms` field — the researcher's own top-N high-frequency content vocabulary (count/length controlled by `thresholds.json > typography.styleMetrics.topFrequentTermsCount` / `minTermLength`). Keep `frequentTerms` in the fingerprint object as-is when you assemble the `## Style Fingerprint` JSON block in Phase 4 below — it steers the section-writer toward the researcher's own established terminology instead of generic phrasing (see `style-fingerprint-rubric.md § Preferred Terminology`).
 
-**Step 2: Text extraction for qualitative analysis** — For each file, extract text:
-- PDF: `python3 -c "import sys; import pdfplumber; [print(p.extract_text()) for p in pdfplumber.open(sys.argv[1]).pages]" past-articles/FILENAME 2>/dev/null || strings past-articles/FILENAME | head -500`
+**Step 2: Text extraction for qualitative analysis** — For each file, extract text mechanically:
+- PDF: `python3 -c "import sys; import pdfplumber; [print(p.extract_text()) for p in pdfplumber.open(sys.argv[1]).pages]" past-articles/FILENAME`. **If this fails** (pdfplumber not installed, or extraction errors), do NOT fall back to a crude `strings`-style byte extraction — it produces garbled, unreliable text. Instead skip that file for the qualitative pass, note it as skipped, and continue with the rest of the corpus.
 - DOCX: `python3 -c "import docx; d=docx.Document('past-articles/FILENAME'); [print(p.text) for p in d.paragraphs]" 2>/dev/null`
 
 **Step 3: Qualitative analysis** — Read the text and computational metrics. Analyze across the qualitative dimensions (C–I below) that the script cannot compute: paragraph formula, tone, rhetorical patterns, templates, representative excerpts.
@@ -377,7 +388,7 @@ After past-articles are scanned, invoke the `voice-miner` agent:
    ```
    If `STUB`: skip steps 3–5 below entirely and tell the user: "Not enough past articles yet for a
    voice fingerprint (need at least `thresholds.json: voice.corpus.minArticles` articles /
-   `voice.corpus.minTotalWords` words — see `src/thresholds.json`). Add more to `past-articles/` and
+   `voice.corpus.minTotalWords` words — see `${CLAUDE_PLUGIN_ROOT}/thresholds.json`). Add more to `past-articles/` and
    re-run `/academic-writer:init`, or skip voice for now." Then continue to Phase 3.5/Phase 3
    without a voice fingerprint.
 3. If `VALID`: run `voice-distiller --from-fingerprint` to seed the four-section
@@ -581,10 +592,10 @@ Use the Write tool to save `.academic-helper/profile.md`:
 name: FULL_NAME_HERE
 author_key: kebab-case-slug
 fieldOfStudy: FIELD_HERE
-citationStyle: inline-parenthetical
-targetLanguage: Hebrew
+citationStyle: CITATION_STYLE_HERE  # e.g. inline-parenthetical, chicago, mla, apa
+targetLanguage: TARGET_LANGUAGE_HERE  # e.g. Hebrew, English, ... (whatever the researcher chose in Phase 1)
 abstractLanguages:
-  - Hebrew
+  - ABSTRACT_LANGUAGE_HERE  # one entry per language chosen in Phase 1 (e.g. Hebrew, or Hebrew + English for a dual abstract)
 analyzedArticles: []
 createdAt: ISO_TIMESTAMP
 updatedAt: ISO_TIMESTAMP

@@ -1,7 +1,7 @@
 ---
 name: voice-miner
 description: Stage 1 of the voice subsystem — read the writer's corpus and emit a markdown style fingerprint. Use when the user runs init or explicitly requests a voice-fingerprint refresh.
-tools: Read, Glob, Grep, Write
+tools: Read, Glob, Grep, Write, Bash
 model: claude-haiku-4-5-20251001
 metadata:
   author: Academic Helper
@@ -19,6 +19,27 @@ empirical signals of their voice. You do not interview — that is `voice-interv
   `manuscript.md` (hebrew-book-producer). Project layout determines path.
 - The previous `.voice/fingerprint.md` if present (so you can incrementally update rather than
   overwrite if the corpus has only grown by one or two articles).
+
+### PDF text extraction (mechanical, via Python — never a crude byte-string fallback)
+
+`.md`/`.docx` files can be read directly. For each `.pdf` file in the corpus, extract its text
+mechanically with `pdfplumber` before analyzing it:
+
+```bash
+python3 -c "
+import sys, pdfplumber
+with pdfplumber.open(sys.argv[1]) as pdf:
+    for page in pdf.pages:
+        print(page.extract_text() or '')
+" "past-articles/FILENAME.pdf"
+```
+
+**If `pdfplumber` is not installed** (import fails / non-zero exit), do NOT fall back to a
+`strings`-style crude byte extraction — that produces garbled, unreliable text that would corrupt
+the fingerprint. Instead, skip that PDF, note it in the fingerprint's Corpus summary as "N PDF(s)
+skipped — pdfplumber unavailable (`pip install pdfplumber` to enable)", and continue with the
+remaining `.md`/`.docx` files in the corpus. This mirrors the mechanical-extraction requirement
+used elsewhere in the pipeline (see `extract-style-metrics.py`'s corpus reader).
 
 ## Outputs
 

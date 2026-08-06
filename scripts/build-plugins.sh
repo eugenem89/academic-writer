@@ -103,10 +103,10 @@ for manifest in "$MANIFESTS_DIR"/*.json; do
     cp -R "$SRC_DIR/scripts" "$PLUGIN_DIR/"
   fi
 
-  # Copy shared resources
-  if [[ -f "$SRC_DIR/words.md" ]]; then
-    cp "$SRC_DIR/words.md" "$PLUGIN_DIR/"
-  fi
+  # Copy shared resources (per-language linking-words references)
+  for words_file in "$SRC_DIR"/words-*.md; do
+    [[ -f "$words_file" ]] && cp "$words_file" "$PLUGIN_DIR/"
+  done
 
   # Copy thresholds
   if [[ -f "$SRC_DIR/thresholds.json" ]]; then
