@@ -65,9 +65,10 @@ print(m.group(1) if m else 'null')
 
 And load linking words reference and the positive terminology reference for Academic Conventions (dimension 6) — the terminology file's language-specific variant is picked from the article's `targetLanguage` (read from `.academic-helper/profile.md`'s frontmatter, e.g. `targetLanguage: Hebrew`; fall back to the English file if the language-specific file is missing):
 ```bash
-cat ${CLAUDE_PLUGIN_ROOT}/words.md
 LANG_LOWER=$(grep -m1 '^targetLanguage:' .academic-helper/profile.md 2>/dev/null | sed 's/^targetLanguage:[[:space:]]*//' | tr '[:upper:]' '[:lower:]')
 LANG_LOWER=${LANG_LOWER:-hebrew}
+WORDS_FILE="${CLAUDE_PLUGIN_ROOT}/words-${LANG_LOWER}.md"
+if [ -f "$WORDS_FILE" ]; then cat "$WORDS_FILE"; else cat ${CLAUDE_PLUGIN_ROOT}/words-hebrew.md; fi
 TERM_FILE="${CLAUDE_PLUGIN_ROOT}/skills/write/references/academic-terminology-${LANG_LOWER}.md"
 if [ -f "$TERM_FILE" ]; then cat "$TERM_FILE"; else cat ${CLAUDE_PLUGIN_ROOT}/skills/write/references/academic-terminology-hebrew.md; fi
 ```

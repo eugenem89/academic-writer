@@ -166,10 +166,29 @@ The plugin is designed for speed. Wherever possible, work is parallelized:
 
 | Path | Purpose |
 |------|---------|
-| `.academic-helper/profile.md` | Your researcher profile (field, style, tools, sources) |
+| `.academic-helper/` | Plugin working data for this project — see below |
 | `past-articles/` | Your published papers for style analysis (never uploaded) |
 | `.claude/agents/` | AI agent prompts (deep-reader, architect, section-writer, auditor, synthesizer) |
 | `references/` | API documentation for integrations |
+
+### What's in `.academic-helper/`?
+
+This directory is created by `/academic-writer:init` and holds everything the plugin needs to
+remember about *this* project between sessions. It is **gitignored** — it can contain your
+personal profile, provider API keys, and drafts of unpublished sources, none of which belong in
+version control.
+
+| File / subfolder | What it is |
+|---|---|
+| `profile.md` | Your researcher profile — field of study, target language, citation style, enabled tools, style fingerprint, and source list. Written once by `init`, updated by `update-field`/`update-tools`. |
+| `secrets.json` | Local-only API keys (e.g. `GOOGLE_API_KEY` for Gemini). Never committed, never sent anywhere except the provider's own API. |
+| `sources.json` | The bibliographic source registry built by `deep-reader` — the single trusted source of citation metadata (author/title/year/page) during writing. |
+| `evidence-ownership.json` / `.lock` | The architect's map of which section "owns" the full description of each piece of evidence, so other sections back-reference instead of repeating it. The `.lock` file prevents concurrent writers from corrupting the map mid-run. |
+| `session-state.json` | Small state file tracking in-progress run decisions (e.g. whether this run committed to the Gemini or Claude-fallback path) so a resumed session stays consistent. |
+| `research-brief.md` | The brief produced by `/academic-writer:research`, if you've run it — background context for the writing phase. |
+| `thresholds.json` | A project-local copy of the plugin's default quality-gate thresholds, seeded by `init`. Edit this copy to override thresholds for this project only; the plugin-level file is the shipped default. |
+| `logs/` | Plain-text session-end log lines (timestamps only, no content) — a lightweight activity trail, not a transcript. |
+| `agent-memory/<agent>/MEMORY.md` | Per-agent scratch memory (e.g. `agent-memory/auditor/MEMORY.md`) that each subagent reads at the start of a run and can update — lets an agent carry forward small lessons (e.g. "this researcher's registry often has stale volume numbers") across runs without re-deriving them each time. |
 
 ---
 

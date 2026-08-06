@@ -385,11 +385,11 @@ For each writer unit in the approved outline, the Agent tool prompt must include
 
 **NOTE:** Do NOT pass `styleFingerprint`, `linkingWords`, `sourcesRegistry`, or `evidenceOwnership` in the prompt — section-writer agents load all four directly from disk to reduce context size:
 - Fingerprint from `.academic-helper/profile.md`
-- Linking words from `${CLAUDE_PLUGIN_ROOT}/words.md`
+- Linking words from `${CLAUDE_PLUGIN_ROOT}/words-{lang}.md`, selected by the article's `targetLanguage` (falls back to `words-hebrew.md` if no language-specific file exists)
 - Source registry from `.academic-helper/sources.json` (deep-reader output)
 - Evidence ownership map from `.academic-helper/evidence-ownership.json` (architect output)
 
-Each section-writer handles a **per-paragraph 8-skill pipeline** internally — in order: Draft → Style Compliance → Hebrew Grammar → Academic Language → Language Purity → Anti-AI → Repetition Check → Citation Audit (logged per paragraph as `section_N_p_M_<skill>`). The authoritative contract for that pipeline — exact skill behavior, the 220-word ceiling, the `thresholds.json`-driven anti-AI gate, and the auditor hard gate (Citation Audit / Skill 8) — lives in the `section-writer` agent definition (`${CLAUDE_PLUGIN_ROOT}/agents/section-writer.md`). Do not duplicate or override it here; the orchestrator only spawns section-writers and waits for their results.
+Each section-writer handles a **per-paragraph 8-skill pipeline** internally — in order: Draft → Style Compliance → Grammar Check (language-specific, dispatched by `targetLanguage`) → Academic Language → Language Purity → Anti-AI → Repetition Check → Citation Audit (logged per paragraph as `section_N_p_M_<skill>`). The authoritative contract for that pipeline — exact skill behavior, the 220-word ceiling, the `thresholds.json`-driven anti-AI gate, and the auditor hard gate (Citation Audit / Skill 8) — lives in the `section-writer` agent definition (`${CLAUDE_PLUGIN_ROOT}/agents/section-writer.md`). Do not duplicate or override it here; the orchestrator only spawns section-writers and waits for their results.
 
 After receiving each section-writer result (per writer unit), mark node complete:
 
