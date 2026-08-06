@@ -8,7 +8,8 @@ export type ErrorCode =
   | 'api_error'
   | 'transient'
   | 'validation'
-  | 'bundle_load_failed';
+  | 'bundle_load_failed'
+  | 'ocr_failed';
 
 export interface StructuredError {
   code: ErrorCode;
@@ -38,6 +39,16 @@ export function validation(message: string, details?: Record<string, unknown>): 
 
 export function bundleLoadFailed(message: string, details?: Record<string, unknown>): StructuredError {
   return { code: 'bundle_load_failed', message, details };
+}
+
+/**
+ * OCR-specific failure: bad finishReason, subprocess (detect/rasterize)
+ * failure, or an oversized-payload path we haven't wired (File API TODO).
+ * Always phrase `message` as an action the caller can take, never a raw
+ * code/status (see gemini_ocr.ts's finishReason mapping for the pattern).
+ */
+export function ocrFailed(message: string, details?: Record<string, unknown>): StructuredError {
+  return { code: 'ocr_failed', message, details };
 }
 
 export function toToolResult(err: StructuredError): {
