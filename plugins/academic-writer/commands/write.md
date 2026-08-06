@@ -507,6 +507,21 @@ Paragraph 2 text...
 - Keep all inline citations exactly as they appear (e.g., `(Author, Title, p. N)`)
 - No extra formatting beyond what the article text already contains
 
+#### Step 9a.5: Hebrew Punctuation Validation (mandatory quality gate)
+
+Before generating the DOCX, run the deterministic punctuation validator over the markdown file just written:
+
+```bash
+python3 plugins/academic-writer/scripts/validate-hebrew-punctuation.py "$MD_PATH"
+```
+
+This checks logical bracket/paren/quote balance and flags mixed gershayim/straight-quote characters and likely-missing bidi marks around embedded Latin/digit runs — the exact class of defect that causes mismatched parentheses and quotation marks in the rendered DOCX.
+
+- **If the script exits non-zero**, review each reported violation and fix the source markdown (do not proceed to DOCX generation with known punctuation defects still present).
+- **If the script exits 0**, continue to Step 9b.
+
+This gate is mandatory for any article containing Hebrew text — it is not optional and must not be skipped even under time pressure.
+
 #### Step 9b: DOCX Output
 
 Write the article data to a JSON file, then run the standalone DOCX generator script:
