@@ -39,6 +39,14 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+      - name: Gate — version consistency (marketplace.json vs plugin.json)
+        if: steps.guard.outputs.skip == 'false'
+        run: bash scripts/check-version-consistency.sh
+
+      - name: Gate — built manifest carries mcpServers (v0.3.0 regression guard)
+        if: steps.guard.outputs.skip == 'false'
+        run: bash scripts/check-built-manifest.sh
+
       - name: Bump patch version
         if: steps.guard.outputs.skip == 'false'
         id: bump
