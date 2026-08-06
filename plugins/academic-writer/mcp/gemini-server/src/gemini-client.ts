@@ -41,7 +41,7 @@ const RETRY_MAX_ATTEMPTS = 3;
 const RETRY_BASE_MS = 1000;
 const RETRY_FACTOR = 2;
 
-let cachedKey: string | undefined | null = undefined; // undefined = uncached, null = checked-and-missing
+let cachedKey: string | undefined = undefined; // undefined = uncached (or last resolution found nothing — never trusted as permanent)
 let cachedDefaults: Partial<Record<ToolName, ModelDefaults>> | null = null;
 let cachedClient: GoogleGenAI | null = null;
 
@@ -54,14 +54,20 @@ async function readSecretsKey(): Promise<string | undefined> {
   try {
     const raw = await readFile(secretsPath, 'utf8');
     const parsed: unknown = JSON.parse(raw);
-    if (
-      typeof parsed === 'object' &&
-      parsed !== null &&
-      'google_api_key' in parsed &&
-      typeof (parsed as { google_api_key: unknown }).google_api_key === 'string'
-    ) {
-      const v = (parsed as { google_api_key: string }).google_api_key.trim();
-      return v.length > 0 ? v : undefined;
+    if (typeof parsed === 'object' && parsed !== null) {
+      const obj = parsed as Record<string, unknown>;
+      // Canonical casing is GOOGLE_API_KEY (matches every write-path/setup doc);
+      // accept lowercase google_api_key as a fallback for robustness.
+      const raw =
+        typeof obj['GOOGLE_API_KEY'] === 'string'
+          ? (obj['GOOGLE_API_KEY'] as string)
+          : typeof obj['google_api_key'] === 'string'
+            ? (obj['google_api_key'] as string)
+            : undefined;
+      if (raw) {
+        const v = raw.trim();
+        return v.length > 0 ? v : undefined;
+      }
     }
   } catch {
     // missing/unreadable/invalid JSON — treat as no key
@@ -70,8 +76,11 @@ async function readSecretsKey(): Promise<string | undefined> {
 }
 
 export async function resolveApiKey(): Promise<string | undefined> {
-  if (cachedKey === null) return undefined;
   if (typeof cachedKey === 'string') return cachedKey;
+  // No positive cache hit — always re-resolve from env + secrets.json rather
+  // than trusting a stale "missing" result. This lets a key written mid-session
+  // (or a server started before the key file existed) be picked up without a
+  // restart. Only successful resolutions are cached.
   const env = (process.env.GOOGLE_API_KEY ?? '').trim();
   if (env) {
     cachedKey = env;
@@ -82,7 +91,6 @@ export async function resolveApiKey(): Promise<string | undefined> {
     cachedKey = fromSecrets;
     return fromSecrets;
   }
-  cachedKey = null;
   return undefined;
 }
 
