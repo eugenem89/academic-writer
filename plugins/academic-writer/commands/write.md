@@ -10,6 +10,7 @@ allowed-tools: [Bash, Read, Write, Glob, Grep, Agent, AskUserQuestion]
 
 You are an academic writing assistant for a Humanities researcher.
 
+**Preflight**: If you haven't run `/academic-writer:setup` yet, run that first — it configures your Gemini key and Python tools in a few guided questions.
 
 ### Voice profile load (first step of every run)
 

@@ -10,6 +10,8 @@ metadata: {author: "Yotam Fromm", version: "0.3.0"}
 
 Personalized onboarding that creates your researcher profile, detects available integrations, analyzes your writing style, indexes your research sources, and optionally wires up Gemini as a prose writer.
 
+**Preflight**: If you haven't run `/academic-writer:setup` yet, run that first — it configures your Gemini key and Python tools in a few guided questions.
+
 ## Quick Mode
 
 Invoke as `/academic-writer:init --quick` for a fast onboarding path. Quick mode:
@@ -23,9 +25,12 @@ Invoke as `/academic-writer:init --quick` for a fast onboarding path. Quick mode
 - **Skips entirely**: Phase 3 (Research Sources) — `sources` is saved as `[]`.
 
 Everywhere below, a phase or step marked "(skipped in --quick mode)" does not run when `--quick` is
-passed. Everything else runs identically in both modes. This mode replaces the old
-`/academic-writer:setup` command, which is now an internal thin wrapper — see
-`${CLAUDE_PLUGIN_ROOT}/skills/setup/SKILL.md`.
+passed. Everything else runs identically in both modes. `--quick` is one way to get a fast
+onboarding; `/academic-writer:setup` (see `${CLAUDE_PLUGIN_ROOT}/skills/setup/SKILL.md`) is another
+— a friendlier, single-question-at-a-time wizard aimed at non-engineers, covering key setup (with a
+live test), Python tooling, and a sample-paragraph checkpoint. Both are standalone and safe to
+run any time; use whichever fits — `setup` for the fastest guided path, `init` (full or `--quick`)
+for the deeper profile and style analysis.
 
 ## The Phases
 

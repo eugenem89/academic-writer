@@ -17,6 +17,19 @@ AI-first academic writing assistant for Humanities researchers. Writes rigorousl
 
 ---
 
+## Get Started in 3 Steps
+
+1. **Install the plugin**
+   ```bash
+   claude plugin install academic-writer --scope project
+   ```
+2. **Run `/academic-writer:setup`** and follow the wizard — a short guided conversation, one question at a time, that gets your Gemini key working (and proves it with a live test), checks your Python tools, and shows you one sample paragraph before you're done.
+3. **Run `/academic-writer:write`** to start your first real article.
+
+Want the full setup — style analysis from past articles, research source indexing? Run `/academic-writer:init` instead (see Quick Start below).
+
+---
+
 ## Quick Start
 
 ### 1. Install the Plugin
