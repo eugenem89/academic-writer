@@ -2,6 +2,33 @@
 
 All notable changes to the academic-writer plugin are documented here.
 
+## [0.6.1] — 2026-08-09
+
+### Fixed
+
+- **Voice migration silently did nothing for anyone upgrading from the old
+  profile layout.** `voice-migrate.sh` checked `.academic-helper/profile.json`
+  for the legacy profile it is supposed to migrate *from*, when the pre-rename
+  directory is `.academic-writer/profile.json`. A blanket rename in `806c962`
+  swept these two path checks along with the rest of the plugin rename. The
+  migration then exited 0 — reporting success — while leaving voice fields stuck
+  in the old dict shape and never seeding `AUTHOR_VOICE.md`. Broken since
+  2026-06-03.
+
+  This was surfaced by `test_voice_e2e_stage1.py::test_stage1_seeds_author_voice`,
+  which had been carried as an accepted "pre-existing failure" across several
+  sessions and shipped in that state with 0.6.0. It was reporting a real defect
+  the whole time.
+
+  Added `test_migrate_recognizes_academic_writer_legacy_path` to isolate
+  legacy-path detection so this cannot silently regress again.
+
+- `test_migrate_strips_voice_fields_and_archives` was additionally stale: it never
+  created the `.academic-helper/profile.md` guard file that `voice-migrate.sh` has
+  required since `bca2417`. Fixture added; no assertion was weakened.
+
+Suite is now 82 passing, 0 failing.
+
 ## [0.6.0] — 2026-08-09
 
 Audit-gap closure release. Everything below came out of the 2026-08-05→06 plugin
