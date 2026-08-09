@@ -2,6 +2,7 @@
 name: init
 description: "First-time setup for the Academic Writer. Configures researcher profile, analyzes writing style from past articles, indexes research sources, and offers Gemini onboarding. Supports a --quick flag for a fast path. Use on first install, when redoing onboarding from scratch, or when the user wants a quick onboarding (pass --quick)."
 user-invocable: true
+disable-model-invocation: true
 allowedTools: [Bash, Read, Write, Glob, Grep, AskUserQuestion, mcp__gemini-api__gemini_raw]
 metadata: {author: "Yotam Fromm", version: "0.3.0"}
 ---
