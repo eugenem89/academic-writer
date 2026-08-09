@@ -12,6 +12,13 @@ def test_migrate_strips_voice_fields_and_archives(tmp_path):
     aw_dir = tmp_path / ".academic-writer"
     aw_dir.mkdir()
     (aw_dir / "profile.json").write_text(FIXTURE.read_text())
+    # voice-migrate.sh is profile-scoped: it requires .academic-helper/profile.md
+    # to exist (guard added in bca2417) before it will run at all.
+    ah_dir = tmp_path / ".academic-helper"
+    ah_dir.mkdir()
+    (ah_dir / "profile.md").write_text(
+        "# Academic Writer Profile\n\n---\nauthor_key: test-writer\n---\n"
+    )
     r = subprocess.run([str(SCRIPT)], cwd=str(tmp_path), capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
     new = json.loads((aw_dir / "profile.json").read_text())
