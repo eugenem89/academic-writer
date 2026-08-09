@@ -142,14 +142,16 @@ for manifest in "$MANIFESTS_DIR"/*.json; do
       if grep -q "^user-invocable: *true" "$skill_md"; then
         skill_name=$(basename "$(dirname "$skill_md")")
         mkdir -p "$PLUGIN_DIR/commands"
-        # Extract description and allowed-tools from frontmatter using awk
+        # Extract description, allowed-tools, and disable-model-invocation from frontmatter using awk
         description=$(awk '/^---$/{n++; next} n==1 && /^description:/{sub(/^description: *"?/,""); sub(/"$/,""); print; exit}' "$skill_md")
         allowed_tools=$(awk '/^---$/{n++; next} n==1 && /^allowed-tools:|^allowedTools:/{sub(/^(allowed-tools|allowedTools): */,""); print; exit}' "$skill_md")
+        disable_model_invocation=$(awk '/^---$/{n++; next} n==1 && /^disable-model-invocation:/{sub(/^disable-model-invocation: */,""); print; exit}' "$skill_md")
         [[ -z "$allowed_tools" ]] && allowed_tools="[Bash, Read, Write, Edit, Glob, Grep]"
         {
           echo "---"
           echo "description: $description"
           echo "allowed-tools: $allowed_tools"
+          [[ "$disable_model_invocation" == "true" ]] && echo "disable-model-invocation: true"
           echo "---"
           echo ""
           echo "# Auto-generated from skills/$skill_name/SKILL.md"
