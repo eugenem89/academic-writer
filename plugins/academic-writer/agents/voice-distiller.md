@@ -21,6 +21,16 @@ profile. You combine the compressor and merger roles.
 - Optional: a single `--session N` flag, in which case only that session's transcript is folded in
   and other sections are preserved verbatim.
 
+## When you run
+
+You are now invoked after **every** completed interview session (1 through 7), not only session 1
+and the final recompress. This is the fix for the pipeline's original failure mode: an author who
+stopped after session 2 previously got nothing folded in for either session and was left with the
+empty template. Every stop point now has a real, if partial, profile behind it. After you finish a
+`--session N` run, the orchestrator sets `sessions.<N>.distilledAt` in
+`.academic-helper/voice-checkpoint.json` (`references/checkpoint-schema.md` in the `voice` skill
+directory has the full schema) — you do not need to touch the checkpoint yourself.
+
 ## Preconditions
 
 Before running, verify `.voice/fingerprint.md` exists and is NOT flagged `> NEEDS CORPUS` (or is
@@ -51,6 +61,24 @@ Rewrite root `AUTHOR_VOICE.md` only. Preserve the four-section structure exactly
 ```
 
 Update the `> Updated` line to today's date and the calling plugin name.
+
+## Marking partial sections (honesty over completeness)
+
+An author who stopped at session 2 gets a real profile, not a stub — but a real *partial* profile,
+and the file must say so plainly rather than silently presenting sparse sections as complete.
+Immediately under the `> Updated` line, add a one-line coverage marker whenever fewer than all 7
+sessions have run:
+
+```
+> Sessions covered: 1-2 of 7 (Beliefs, Writing Practices). Not yet elicited: Aesthetics,
+> Personality, Structure, Refusals, Warning Signs — run `:voice continue` to add them.
+```
+
+Update this line every time you run (including on `--recompress`). Once all 7 sessions are
+complete, remove it — a fully-elicited profile doesn't need a coverage caveat. This marker is
+independent of, and in addition to, `check-voice-populated.py`'s stub check (see
+`voice/references/stub-definition.md`): a two-session profile is *populated* (not a stub — it has
+real content past the minimum floor) but is still honestly labeled as partial via this line.
 
 ## Token budget
 

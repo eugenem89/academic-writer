@@ -51,6 +51,7 @@ This walks you through:
 | `/academic-writer:edit` | **Edit an article** — revise sections, fix citations, adjust tone, restructure |
 | `/academic-writer:edit-section` | **Edit one section** — fast, focused single-section edit |
 | `/academic-writer:proofread` | **Proofread (הגהה)** — mechanical fixes (typos, punctuation, typography) + a change report; never rewrites prose |
+| `/academic-writer:ocr` | **OCR a scanned PDF or image** — clean extracted text via Gemini vision, born-digital pages skipped automatically |
 | `/academic-writer:research` | **Research a topic** — query your sources, get answers with citations |
 | `/academic-writer:init` | **First-time setup** — profile, style analysis, source indexing |
 | `/academic-writer:health` | **System check** — verify all integrations are working |
@@ -158,6 +159,7 @@ The plugin is designed for speed. Wherever possible, work is parallelized:
 |------|---------|
 | `.academic-helper/` | Plugin working data for this project — see below |
 | `past-articles/` | Your published papers for style analysis (never uploaded) |
+| `ocr-output/` | Extracted text from `/academic-writer:ocr`, one `<name>.ocr.md` per scanned source |
 | `.claude/agents/` | AI agent prompts (deep-reader, architect, section-writer, auditor, synthesizer) |
 | `references/` | API documentation for integrations |
 
