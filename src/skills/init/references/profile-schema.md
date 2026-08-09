@@ -109,7 +109,20 @@ updatedAt: ISO_TIMESTAMP
 ```json
 []
 ```
+
+## Gemini
+
+```json
+{
+  "enabled": true,
+  "approvedLanguages": [],
+  "models": {}
+}
 ```
+```
+
+`## Gemini` reflects the outcome of `init` Phase 3.5: `enabled: false` (no `approvedLanguages`/
+`models` keys) if the researcher chose "No, Claude only".
 
 ## 25-Dimension Style Analysis Rubric
 
