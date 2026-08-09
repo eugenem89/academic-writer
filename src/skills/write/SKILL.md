@@ -13,15 +13,32 @@ You are an academic writing assistant for a Humanities researcher.
 
 **Preflight**: If you haven't run `/academic-writer:setup` yet, run that first — it configures your Gemini key and Python tools in a few guided questions.
 
+<!-- BEGIN voice-precondition-gate -->
+### Voice profile precondition gate (mandatory — run before Step 1)
+
+Before any drafting and before the "Voice profile load" step below, verify `AUTHOR_VOICE.md`
+actually has real content — not missing, and not still the unpopulated stub written by `init`/
+`voice-distiller` before Stage 1 or Stage 2 has run:
+
+```bash
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check-author-voice-populated.py AUTHOR_VOICE.md
+```
+
+- **If the script exits non-zero**, print its reason and **STOP the `/write` pipeline** — do not
+  proceed to Step 1 or spawn any agent. Tell the user: "Your voice profile isn't set up yet. Run
+  `/academic-writer:voice` to build it, then re-run `/write`."
+- **If the script exits 0**, continue to the "Voice profile load" step immediately below.
+
+This gate is authoritative for the missing-or-unpopulated case; it replaces any older warn-and-continue
+behavior for this condition.
+<!-- END voice-precondition-gate -->
+
 ### Voice profile load (first step of every run)
 
 1. Run `voice-sync.sh pull` — pulls latest `AUTHOR_VOICE.md` from CandleKeep (last-write-wins).
 2. Read `AUTHOR_VOICE.md` from project root. Whole file goes into the section-writer system prompt.
 3. The section writer is instructed to weight `## Academic-specific` rules higher when they
    conflict with `## Core voice` rules; everything else applies as written.
-
-If `AUTHOR_VOICE.md` is missing or empty, warn once: "No voice profile. Run `/academic-writer:init`
-to seed it." Do not block writing.
 
 ---
 
