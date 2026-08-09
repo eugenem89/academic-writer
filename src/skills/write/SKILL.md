@@ -530,7 +530,7 @@ Paragraph 2 text...
 Before generating the DOCX, run the deterministic punctuation validator over the markdown file just written:
 
 ```bash
-python3 plugins/academic-writer/scripts/validate-hebrew-punctuation.py "$MD_PATH"
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/validate-hebrew-punctuation.py "$MD_PATH"
 ```
 
 This checks logical bracket/paren/quote balance and flags mixed gershayim/straight-quote characters and likely-missing bidi marks around embedded Latin/digit runs — the exact class of defect that causes mismatched parentheses and quotation marks in the rendered DOCX.
