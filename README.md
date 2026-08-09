@@ -99,6 +99,8 @@ Your profile is saved to `.academic-writer/profile.json` and loaded automaticall
 | `/academic-writer:research` | Research a topic using your indexed sources |
 | `/academic-writer:edit` | Edit a previously written article |
 | `/academic-writer:edit-section` | Quick edit of a single section |
+| `/academic-writer:ocr` | OCR a scanned PDF or image (or a directory of them) into clean text |
+| `/academic-writer:proofread` | Mechanical proofread (הגהה) pass — typos, punctuation, typography |
 | `/academic-writer:update-field` | Change your field of study |
 | `/academic-writer:update-tools` | Add or remove integrations |
 | `/academic-writer:health` | Check all integrations and profile status |
@@ -122,6 +124,7 @@ All integrations are optional. Choose which to enable during `/academic-writer:i
 ```
 your-research-folder/
 ├── past-articles/         ← Drop your published papers here (PDFs or DOCXs)
+├── ocr-output/            ← Extracted text from /academic-writer:ocr
 ├── .academic-writer/
 │   ├── profile.json       ← Your profile (auto-created)
 │   ├── research-brief.md  ← Output from /academic-writer:ideate
