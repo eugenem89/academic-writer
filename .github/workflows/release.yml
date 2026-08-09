@@ -39,13 +39,11 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Gate — version consistency (marketplace.json vs plugin.json)
+      - name: Setup Node
         if: steps.guard.outputs.skip == 'false'
-        run: bash scripts/check-version-consistency.sh
-
-      - name: Gate — built manifest carries mcpServers (v0.3.0 regression guard)
-        if: steps.guard.outputs.skip == 'false'
-        run: bash scripts/check-built-manifest.sh
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
 
       - name: Bump patch version
         if: steps.guard.outputs.skip == 'false'
@@ -60,7 +58,34 @@ jobs:
           jq --arg v "$NEW" '.version = $v' manifests/academic-writer.json > _tmp.json && mv _tmp.json manifests/academic-writer.json
           jq --arg v "$NEW" '.version = $v | .plugins[0].version = $v' .claude-plugin/marketplace.json > _tmp.json && mv _tmp.json .claude-plugin/marketplace.json
 
-          git add package.json manifests/academic-writer.json .claude-plugin/marketplace.json
+      # Re-run the build against the just-bumped source manifest so the
+      # committed build output (plugins/academic-writer/.claude-plugin/plugin.json,
+      # hooks dist, bundled MCP server) is regenerated at the new version
+      # BEFORE anything is committed or pushed. Without this, the bump only
+      # touches package.json/manifests/academic-writer.json/marketplace.json
+      # and the built plugin.json silently drifts behind (see v0.6.1 incident).
+      - name: Rebuild plugin at bumped version
+        if: steps.guard.outputs.skip == 'false'
+        run: npm run build
+
+      # These gates now run AFTER the bump + rebuild, against the exact
+      # tree that is about to be committed and pushed — so a real desync
+      # fails the job here and blocks the push, instead of only checking
+      # the (already-consistent) pre-bump state.
+      - name: Gate — version consistency (marketplace.json vs plugin.json)
+        if: steps.guard.outputs.skip == 'false'
+        run: bash scripts/check-version-consistency.sh
+
+      - name: Gate — built manifest carries mcpServers (v0.3.0 regression guard)
+        if: steps.guard.outputs.skip == 'false'
+        run: bash scripts/check-built-manifest.sh
+
+      - name: Commit, tag, and push
+        if: steps.guard.outputs.skip == 'false'
+        run: |
+          NEW="${{ steps.bump.outputs.new }}"
+
+          git add package.json manifests/academic-writer.json .claude-plugin/marketplace.json plugins/
           git commit -m "chore: bump version to v${NEW}"
           git tag "v${NEW}"
           git push origin main
