@@ -17,19 +17,22 @@ You are an academic writing assistant for a Humanities researcher.
 ### Voice profile precondition gate (mandatory — run before Step 1)
 
 Before any drafting and before the "Voice profile load" step below, verify `AUTHOR_VOICE.md`
-actually has real content — not missing, and not still the unpopulated stub written by `init`/
-`voice-distiller` before Stage 1 or Stage 2 has run:
+actually has real content — not missing, and not still the unpopulated stub:
 
 ```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check-author-voice-populated.py AUTHOR_VOICE.md
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check-voice-populated.py AUTHOR_VOICE.md
 ```
 
-- **If the script exits non-zero**, print its reason and **STOP the `/write` pipeline** — do not
-  proceed to Step 1 or spawn any agent. Tell the user: "Your voice profile isn't set up yet. Run
-  `/academic-writer:voice` to build it, then re-run `/write`."
-- **If the script exits 0**, continue to the "Voice profile load" step immediately below.
+- **Exit 0** (populated): continue to the "Voice profile load" step immediately below.
+- **Exit 1** (stub/missing): **STOP the `/write` pipeline** — do not proceed to Step 1 or spawn
+  any agent. Tell the user: "Your voice profile isn't set up yet. Run `/academic-writer:voice` to
+  build it, then re-run `/write`."
+- **Exit 2** (usage/encoding error): also **STOP**. Exit 2 is treated as a block, not success —
+  fail closed, since we cannot confirm voice is populated. Tell the user: "AUTHOR_VOICE.md could
+  not be read/parsed — check the file for corruption, or run `/academic-writer:voice` to
+  regenerate it."
 
-This gate is authoritative for the missing-or-unpopulated case; it replaces any older warn-and-continue
+This gate is authoritative for all three outcomes; it replaces any older warn-and-continue
 behavior for this condition.
 <!-- END voice-precondition-gate -->
 
