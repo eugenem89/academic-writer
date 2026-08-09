@@ -24,6 +24,10 @@ const emptyProject = mkdtempSync(join(tmpdir(), 'aw-nocreds-'));
 const env = { ...process.env, CLAUDE_PROJECT_DIR: emptyProject };
 delete env.GOOGLE_API_KEY;
 delete env.GEMINI_API_KEY;
+// Also strip the userConfig-sourced key (manifests/academic-writer.json's google_api_key
+// option, substituted as USER_CONFIG_GOOGLE_API_KEY) so this harness still proves a true
+// no-credentials state even on a machine where that happens to be set ambiently.
+delete env.USER_CONFIG_GOOGLE_API_KEY;
 
 const transport = new StdioClientTransport({ command: 'node', args: [join(SERVER_DIR, 'dist/index.js')], env });
 const client = new Client({ name: 'e2e-nocreds', version: '0.0.1' }, { capabilities: {} });

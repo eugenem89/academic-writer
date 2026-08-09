@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "description": "Feature inventory for the academic-writer plugin. A checklist for future audits: each top-level feature lists its subfeatures, the source of truth, runtime status, and known issues. status: ok | partial | broken | missing. Regenerate/extend this file whenever features are added or removed.",
-  "generatedAt": "2026-08-09T10:03:00Z",
+  "generatedAt": "2026-08-09T10:12:00Z",
   "pluginVersion": "0.5.0",
   "features": [
     {
@@ -24,7 +24,7 @@
           "id": "setup-quick",
           "name": "setup skill — standalone interview-driven onboarding wizard (Gemini key incl. live-tested GOOGLE_API_KEY, Python deps, optional CandleKeep/NotebookLM detection, sample-paragraph checkpoint)",
           "status": "ok",
-          "issue": "Reworked in commit 97594b9 (a3): setup is no longer a thin wrapper delegating to init --quick. It is user-invocable: true (src/skills/setup/SKILL.md:4) and a full independent 267-line, one-question-at-a-time wizard with its own preflight, Gemini key live-test via mcp__gemini-api__gemini_raw, and closing profile summary; init/SKILL.md:12 and setup/SKILL.md:13 cross-reference each other for the deeper vs quick path instead of one delegating to the other. Both remain safe to re-run and interoperate via the shared profile schema."
+          "issue": "Reworked in commit 97594b9 (a3): setup is no longer a thin wrapper delegating to init --quick. It is user-invocable: true (src/skills/setup/SKILL.md:4) and a full independent 267-line, one-question-at-a-time wizard with its own preflight, Gemini key live-test via mcp__gemini-api__gemini_raw, and closing profile summary; init/SKILL.md:12 and setup/SKILL.md:13 cross-reference each other for the deeper vs quick path instead of one delegating to the other. Both remain safe to re-run and interoperate via the shared profile schema. Step 3 (Gemini API key) now offers plugin configuration (claude plugin install/config --config google_api_key=...) as the recommended, securely-stored option alongside the pre-existing env-var and secrets.json choices; init/SKILL.md Phase 3.5 mirrors the same three options for consistency."
         },
         {
           "id": "integration-detect",
@@ -428,6 +428,12 @@
           "name": "gemini_ocr — single consolidated OCR tool (born-digital text-layer detect via PyMuPDF, sequential Gemini vision batches for scans, response_format concise/detailed enum, page-range + truncation_message, actionable structured errors, Sonnet-only correction left out of scope)",
           "status": "ok",
           "issue": "Now wired to a user-facing surface: /academic-writer:ocr command (src/skills/ocr/SKILL.md) resolves a file/directory path, checks the shared GOOGLE_API_KEY credential (env or .academic-helper/secrets.json, same resolution as setup/init), calls gemini_ocr sequentially per document/page batch (following truncation), and writes ocr-output/<name>.ocr.md. The 20MB Files API path is still not implemented server-side (see gemini-client-ocr-helpers.ts uploadViaFilesApi TODO) — the skill retries once at single-page granularity and otherwise reports the limit honestly rather than silently working around it."
+        },
+        {
+          "id": "credential-resolution",
+          "name": "Gemini API key resolution — userConfig (preferred, sensitive-stored) > GOOGLE_API_KEY env > .academic-helper/secrets.json (both casings)",
+          "status": "ok",
+          "issue": "Migrated the plugin's Gemini credential onto Claude Code's userConfig mechanism (manifests/academic-writer.json declares google_api_key, sensitive: true; substituted as USER_CONFIG_GOOGLE_API_KEY in mcpServers.gemini-api.env via ${user_config.google_api_key}). gemini-client.ts's resolveApiKey() checks it first, then falls back to the pre-existing GOOGLE_API_KEY env var, then .academic-helper/secrets.json (GOOGLE_API_KEY or lowercase google_api_key) — all three paths remain fully functional, userConfig is additive/preferred, not a replacement. Investigated whether the 'channels' MCP pattern applied here first (it doesn't — channels is for a server pushing messages into a session, not credential config; userConfig is the actual mechanism, per the Claude Code docs mirror's Plugin manifest reference). scripts/build-plugins.sh now passes userConfig through into the generated plugin.json. Covered by tests/gemini-client-key-resolution.test.ts (9 tests: every precedence pairing plus blank/whitespace optional-field fallthrough)."
         }
       ]
     },

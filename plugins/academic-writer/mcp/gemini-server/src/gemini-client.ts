@@ -77,10 +77,36 @@ async function readSecretsKey(): Promise<string | undefined> {
 
 export async function resolveApiKey(): Promise<string | undefined> {
   if (typeof cachedKey === 'string') return cachedKey;
-  // No positive cache hit — always re-resolve from env + secrets.json rather
-  // than trusting a stale "missing" result. This lets a key written mid-session
-  // (or a server started before the key file existed) be picked up without a
-  // restart. Only successful resolutions are cached.
+  // No positive cache hit — always re-resolve rather than trusting a stale
+  // "missing" result. This lets a key written mid-session (or a server
+  // started before the key file existed) be picked up without a restart.
+  // Only successful resolutions are cached.
+  //
+  // Precedence (highest first):
+  //   1. USER_CONFIG_GOOGLE_API_KEY — the plugin's `userConfig.google_api_key`
+  //      (manifests/academic-writer.json), substituted into this process's env
+  //      as `${user_config.google_api_key}` by Claude Code. This is the
+  //      PREFERRED path: Claude Code stores `sensitive: true` userConfig
+  //      values in the OS keychain (or a protected credentials file), never
+  //      plaintext in settings.json. An unconfigured optional userConfig
+  //      field substitutes to an empty string, so this check falls through
+  //      cleanly — it never throws or blocks the paths below.
+  //   2. GOOGLE_API_KEY — plain shell/environment variable (pre-existing
+  //      path; forwarded verbatim through the plugin manifest's `env` block
+  //      too, so a shell export keeps working exactly as before).
+  //   3. .academic-helper/secrets.json — project-local file written by
+  //      /academic-writer:setup or /academic-writer:init (accepts both
+  //      `GOOGLE_API_KEY` and lowercase `google_api_key` — see
+  //      readSecretsKey() below; this is the casing-mismatch fix from a
+  //      prior bug and must not regress).
+  // All three paths are fully supported — userConfig is an ADDITIONAL,
+  // preferred source, not a replacement. A researcher with a working
+  // env-var or secrets.json setup today keeps working unchanged.
+  const fromUserConfig = (process.env.USER_CONFIG_GOOGLE_API_KEY ?? '').trim();
+  if (fromUserConfig) {
+    cachedKey = fromUserConfig;
+    return fromUserConfig;
+  }
   const env = (process.env.GOOGLE_API_KEY ?? '').trim();
   if (env) {
     cachedKey = env;
@@ -92,6 +118,15 @@ export async function resolveApiKey(): Promise<string | undefined> {
     return fromSecrets;
   }
   return undefined;
+}
+
+/**
+ * Test-only: clears the module-level key cache so resolveApiKey() re-checks
+ * env/userConfig/secrets.json on the next call instead of returning a cached
+ * value from a previous test. Never called from production code paths.
+ */
+export function __resetApiKeyCacheForTests(): void {
+  cachedKey = undefined;
 }
 
 async function loadProfileModelDefaults(): Promise<Partial<Record<ToolName, ModelDefaults>>> {

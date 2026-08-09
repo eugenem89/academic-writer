@@ -21,7 +21,9 @@ export function noCredentials(): StructuredError {
   return {
     code: 'no_credentials',
     message:
-      'No Gemini API key found. Set GOOGLE_API_KEY in your environment or run /academic-writer:setup to configure .academic-helper/secrets.json.',
+      'No Gemini API key found. Run /academic-writer:setup to configure one — the plugin\'s ' +
+      'secure "Gemini API key" setting (config option google_api_key) is preferred, or set ' +
+      'GOOGLE_API_KEY in your environment, or store it in .academic-helper/secrets.json.',
   };
 }
 

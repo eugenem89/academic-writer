@@ -19,7 +19,7 @@ AI-first academic writing assistant for Humanities researchers. Writes rigorousl
 
 ## Get Started in 3 Steps
 
-1. **Install the plugin**
+1. **Install the plugin** — optionally pass your Gemini key at install time (see below), or set it up during Step 2's wizard instead:
    ```bash
    claude plugin install academic-writer --scope project
    ```
@@ -27,6 +27,24 @@ AI-first academic writing assistant for Humanities researchers. Writes rigorousl
 3. **Run `/academic-writer:write`** to start your first real article.
 
 Want the full setup — style analysis from past articles, research source indexing? Run `/academic-writer:init` instead (see Quick Start below).
+
+### Configuring your Gemini API key
+
+The plugin's bundled Gemini MCP server (drafting, editing, synthesis, OCR) resolves an API key from
+three sources, in this order — set whichever fits, or several at once, since the most-preferred
+present one just wins:
+
+1. **Plugin configuration (recommended)** — stored securely by Claude Code itself (OS keychain, or a
+   protected credentials file where no keychain is available), never plaintext in a settings file:
+   ```bash
+   claude plugin install academic-writer --scope project --config google_api_key="AIza..."
+   # already installed?
+   claude plugin config academic-writer --config google_api_key="AIza..."
+   ```
+2. **`GOOGLE_API_KEY` environment variable** — works across all your projects, set in your shell profile.
+3. **`.academic-helper/secrets.json`** (project-local, gitignored) — `{ "GOOGLE_API_KEY": "AIza..." }`.
+
+`/academic-writer:setup` walks through all three interactively and live-tests the result either way.
 
 ---
 

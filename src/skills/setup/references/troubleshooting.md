@@ -5,11 +5,16 @@
 ## Gemini key / `gemini_raw` ping failures
 
 **`{ error: { code: "no_credentials" } }`**
-The MCP server (`plugins/academic-writer/mcp/gemini-server`) could not find `GOOGLE_API_KEY` in
-either its environment or `.academic-helper/secrets.json`. Common causes:
-- You just set the environment variable but haven't restarted Claude Code — the MCP server process
-  was spawned before the variable existed. **Fix**: restart Claude Code, then re-run
-  `/academic-writer:setup`.
+The MCP server (`plugins/academic-writer/mcp/gemini-server`) checks three sources, in this order,
+and found none of them: the plugin's own `google_api_key` configuration option (preferred, securely
+stored), `GOOGLE_API_KEY` in its environment, or `.academic-helper/secrets.json`. Common causes:
+- You just set the plugin configuration or the environment variable but haven't restarted Claude
+  Code — the MCP server process was spawned before the value existed. **Fix**: restart Claude Code,
+  then re-run `/academic-writer:setup`.
+- You configured the plugin option (`claude plugin install --config google_api_key=...` /
+  `claude plugin config`) at a different scope (`user` vs `project`) than the one active for this
+  session. **Fix**: re-run the config command at the scope you're actually using, or check current
+  values via `/plugin`.
 - You saved the key to a *different* project's `.academic-helper/secrets.json` — the server reads
   from the current working directory. **Fix**: confirm you're in the right project folder.
 - Typo in the key file — the server reads the key `GOOGLE_API_KEY` (accepts lowercase
@@ -25,6 +30,13 @@ either its environment or `.academic-helper/secrets.json`. Common causes:
 
 ## Key storage troubleshooting
 
+- **Plugin configuration not resolving**: this is the preferred, most secure path (OS keychain, or a
+  protected credentials file on platforms without one) — but it requires an action outside this
+  conversation (`claude plugin install --config google_api_key=...`, `claude plugin config`, or the
+  `/plugin` manager's configuration dialog) followed by a Claude Code restart so the MCP server
+  process picks up the new value. It coexists with the two paths below; setting it doesn't require
+  removing an existing `GOOGLE_API_KEY` env var or `secrets.json` — the server just prefers whichever
+  is set first, in that order.
 - **Environment variable not sticking**: confirm you added the `export GOOGLE_API_KEY=...` line to
   the shell profile file your shell actually loads (`~/.zshrc` for zsh, `~/.bashrc` or
   `~/.bash_profile` for bash), not just typed it into the current terminal session. Open a new
