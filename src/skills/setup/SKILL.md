@@ -94,17 +94,25 @@ If "No, Claude only": skip to Step 4, note Gemini disabled in the closing summar
 
 ### 3b. Check for an existing key
 
+This shell-level check only sees two of the three possible sources — it cannot read the plugin's
+own secure configuration storage from inside this conversation (that lives in the OS keychain / a
+protected credentials file, resolved by the MCP server process, not this shell). Treat a `NO_KEY`
+result here as "nothing found at the shell level," not "no key configured anywhere" — the live test
+in 3d is the authoritative check regardless of which of the three sources supplied the key:
+
 ```bash
 if [ -n "$GOOGLE_API_KEY" ]; then
   echo "Found GOOGLE_API_KEY in environment."
 elif [ -f .academic-helper/secrets.json ] && python3 -c "import json,sys; sys.exit(0 if json.load(open('.academic-helper/secrets.json')).get('GOOGLE_API_KEY') else 1)" 2>/dev/null; then
   echo "Found GOOGLE_API_KEY in .academic-helper/secrets.json."
 else
-  echo "NO_KEY"
+  echo "NO_KEY (at the shell level — may still be set via the plugin's own config; the live test in 3d will tell)"
 fi
 ```
 
-If a key was found, skip to 3d (live test) — no need to re-enter it.
+If a key was found, skip to 3d (live test) — no need to re-enter it. If `NO_KEY`, still try 3d once
+before assuming nothing is configured — a plugin-config key wouldn't show up in the check above but
+will work.
 
 ### 3c. Get and store a key
 
@@ -119,8 +127,13 @@ AskUserQuestion(questions=[{
   "header": "Key storage",
   "options": [
     {
-      "label": "Environment variable (recommended)",
-      "description": "Set GOOGLE_API_KEY in your shell profile — works across all your projects.",
+      "label": "Plugin configuration (recommended)",
+      "description": "Stored securely by Claude Code itself (OS keychain, or a protected credentials file) — never plaintext in a settings file.",
+      "markdown": "```\nclaude plugin install academic-writer --scope project \\\n  --config google_api_key=\"AIza...\"\n\n# Already installed? Reconfigure any time via the\n# /plugin manager (Manage plugins -> academic-writer)\n# or:\nclaude plugin config academic-writer \\\n  --config google_api_key=\"AIza...\"\n```"
+    },
+    {
+      "label": "Environment variable",
+      "description": "Set GOOGLE_API_KEY in your shell profile — works across all your projects, but is not stored as securely as the plugin option above.",
       "markdown": "```\nexport GOOGLE_API_KEY=\"AIza...\"\n# add this line to ~/.zshrc or ~/.bashrc\n```"
     },
     {
@@ -133,6 +146,13 @@ AskUserQuestion(questions=[{
 }])
 ```
 
+- **Plugin configuration (recommended)**: print the `claude plugin install`/`claude plugin config`
+  command above for the user to run in their own terminal (or point them at the `/plugin` manager's
+  configuration dialog), then ask them to confirm they've done it. Claude Code cannot open its own
+  plugin-configuration dialog or run its own CLI from inside this conversation — same reason the
+  environment-variable path below needs the user to act outside the chat. Once set this way, the key
+  is substituted into the bundled Gemini MCP server's environment automatically; nothing else needs
+  updating.
 - **Environment variable**: print the export line above for the user to run in their own terminal, then ask them to confirm they've done it and reopened their session — Claude Code cannot set their shell environment from inside this conversation.
 - **This project only**: ask them to paste the key, then write it with exactly the key name `GOOGLE_API_KEY` (never a different casing):
 
@@ -151,6 +171,11 @@ p.chmod(stat.S_IRUSR | stat.S_IWUSR)
 
 The pasted key is passed through an environment variable rather than typed directly into the command, so it never lands in shell history. Confirm `.academic-helper/secrets.json` is gitignored.
 
+All three paths keep working side by side — the MCP server checks the plugin configuration first,
+then the environment variable, then `.academic-helper/secrets.json`, so switching methods later
+(or having leftover config from an older setup) never breaks anything; the most-preferred source
+present just wins.
+
 ### 3d. Live-test the key
 
 Actually call the tool — don't just check the file exists:
@@ -163,7 +188,7 @@ mcp__gemini-api__gemini_raw({
 ```
 
 - **Success** (response text contains "PONG"): "Your Gemini key works." Store `gemini.enabled = true`.
-- **`no_credentials` error**: "I couldn't find your key yet. If you just set the environment variable, you'll need to restart Claude Code so it picks up the change, then run `/academic-writer:setup` again." Store `gemini.enabled = false`. See `references/troubleshooting.md` for more.
+- **`no_credentials` error**: "I couldn't find your key yet. If you just set the environment variable or plugin configuration, you'll need to restart Claude Code so the MCP server picks up the change, then run `/academic-writer:setup` again." Store `gemini.enabled = false`. See `references/troubleshooting.md` for more.
 - **Any other error**: "Your key didn't work — let's try again. It might be mistyped, or the key might not be activated yet." Offer to re-enter (back to 3c) or skip. See `references/troubleshooting.md` for common causes.
 
 ---

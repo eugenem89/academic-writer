@@ -115,8 +115,11 @@ for manifest in "$MANIFESTS_DIR"/*.json; do
 
   # Generate plugin.json — read recognized plugin.json fields FROM the manifest.
   # Only the schema-recognized keys are emitted (Official Docs p.114):
-  #   name, version, description, author, homepage, repository, license, keywords, mcpServers.
+  #   name, version, description, author, homepage, repository, license, keywords,
+  #   mcpServers, userConfig.
   # mcpServers is copied through verbatim so the bundled MCP server is registered.
+  # userConfig is copied through verbatim so Claude Code prompts for (and securely
+  # stores) declared options like the Gemini API key at plugin-enable time.
   # author/homepage/repository/license/keywords fall back to defaults only when absent.
   jq '{
     name: .name,
@@ -128,7 +131,8 @@ for manifest in "$MANIFESTS_DIR"/*.json; do
     license: (.license // "MIT"),
     keywords: (.keywords // ["academic-writing","humanities","citations","claude-code","plugin"])
   }
-  + (if .mcpServers then { mcpServers: .mcpServers } else {} end)' \
+  + (if .mcpServers then { mcpServers: .mcpServers } else {} end)
+  + (if .userConfig then { userConfig: .userConfig } else {} end)' \
     "$manifest" > "$PLUGIN_DIR/.claude-plugin/plugin.json"
 
   # Generate commands from user-invocable skills

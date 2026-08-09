@@ -43,6 +43,7 @@ Slash commands are auto-generated from skills with `user-invocable: true`. To ad
 | `/academic-writer:edit` | edit | Revise a drafted article |
 | `/academic-writer:edit-section` | edit-section | Revise one section only |
 | `/academic-writer:proofread` | proofread | Mechanical הגהה pass — fixes + change report |
+| `/academic-writer:ocr` | ocr | OCR a scanned PDF/image (or directory) into clean text via Gemini vision |
 | `/academic-writer:init` | init | Full onboarding (first install); pass `--quick` for fast onboarding (replaces the old `/academic-writer:setup` command — `setup` is now an internal, non-invocable thin wrapper) |
 | `/academic-writer:research` | research | Investigate a topic |
 | `/academic-writer:ideate` | ideate | Frame a research question |
