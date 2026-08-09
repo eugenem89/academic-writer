@@ -1,7 +1,25 @@
 # Stage 2 Question Bank — Academic
 
 This file is consumed by the `voice-interviewer` agent. The interviewer adapts within sessions
-(12–18 questions, hard cap 18) but draws from this seed list.
+(12–18 questions, hard cap 18) but draws from this seed list. Also see `voice-interviewer.md`'s
+"Confirm, don't compose" section — many `[T]` questions below should be asked as a fingerprint
+confirmation rather than cold, when `.voice/fingerprint.md` already has a matching signal.
+
+## Changelog — 2026 resumability redesign
+
+Trimmed near-duplicate questions to cut composition burden without losing signal (the interview
+still soft-floors at 12 and hard-caps at 18 per session; this just changes what fills those slots):
+
+- **01 — Beliefs**: merged the two Hazal/transliteration questions into one (asking both angles in
+  a single question costs one answer instead of two, and they were probing the same instinct).
+- **05 — Structure**: cut "How do you signal a section break that isn't a heading?" — verbatim
+  duplicate of 03's "How do you signal a beat change without a heading?"; one answer covers both.
+- **06 — Refusals**: cut "Citation patterns dishonest-dressed-as-scholarly. Name three." — verbatim
+  duplicate of 01's "What's a citation pattern that's dishonest dressed as scholarly?"; cut "Five
+  'AI-coded' words" — near-duplicate of 03's Hebrew-specific version, which is more useful because
+  it's language-scoped (banned-word lists must stay per-language, see `voice-distiller.md`'s
+  compression principles). 07's "One AI-tell that survives even careful editing" stays — it's a
+  distinct later-stage-editing angle, not a duplicate of either.
 
 ## Layer legend
 
@@ -14,8 +32,8 @@ This file is consumed by the `voice-interviewer` agent. The interviewer adapts w
 - [V] Name one thing "good academic writing" is supposed to do that you think is bullshit. Defend.
 - [V] What's a stylistic move you respect in writers you disagree with?
 - [V] What's one belief about your field that you would defend in a footnote but not the main text?
-- [T] Pick one: חז״ל / Hazal / Chazal / חז\"ל. Justify it for an audience using a different convention.
-- [T] One Hebrew transliteration choice you refuse to make even when standard. Why?
+- [T] Pick your Hazal-family convention (חז״ל / Hazal / Chazal / חז\"ל) for an audience using a
+  different one, AND name one other standard transliteration you refuse regardless. Justify both.
 - [A] When a source contradicts your thesis, do you preempt, footnote, cut, or restructure? Explain.
 - [A] Is hedging ("arguably", "tends to") cowardice or rigor? Defend your answer.
 - [V] One critique of your field that no insider has the standing to make.
@@ -74,7 +92,7 @@ This file is consumed by the `voice-interviewer` agent. The interviewer adapts w
 - [A] Where does the תקציר go? What does it have to do?
 - [A] Intro length as % of total. Conclusion length as % of total.
 - [A] One section every paper of yours needs that most papers don't have.
-- [T] How do you signal a section break that isn't a heading?
+<!-- Cut: "How do you signal a section break that isn't a heading?" — duplicate of 03's beat-change question. See changelog at top of this file. -->
 - [A] Footnotes: explanatory, only citation, mixed, banned? Defend.
 - [A] Section titles: declarative, descriptive, question, none?
 - [V] How do you transition between sections — bridge sentence, blank line, summary?
@@ -86,9 +104,9 @@ This file is consumed by the `voice-interviewer` agent. The interviewer adapts w
 
 - [V] One sentence you would never write, even if a source demanded it.
 - [V] Three opening sentences that are immediate cuts.
-- [A] Citation patterns dishonest-dressed-as-scholarly. Name three.
+<!-- Cut: "Citation patterns dishonest-dressed-as-scholarly" — duplicate of 01's citation-pattern question. -->
 - [A] Sources you would not cite even if relevant. Why?
-- [T] Five "AI-coded" words.
+<!-- Cut: "Five 'AI-coded' words" — near-duplicate of 03's Hebrew-scoped AI-coded question (kept there because banned-word lists must stay per-language). -->
 - [T] Five Hebrew academic clichés you refuse.
 - [V] Three closing sentences that are immediate cuts.
 - [A] Tone you would never adopt — sycophantic, contemptuous, breezy, prosecutorial?

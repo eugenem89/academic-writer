@@ -26,7 +26,7 @@ Never summarize feedback without acting on it.
 |----------|-----------------|---------|
 | **A. Article edit** | The finished article file in `articles/` | "Section III repeats Text 360 — consolidate" |
 | **B. Profile update** | `.academic-helper/profile.md` — fingerprint, preferences, article structure, targetLanguage, abstractLanguages, outputFormatPreferences | "My paragraphs should be shorter by default" |
-| **C. Pattern reference update** | `plugins/academic-writer/skills/write/references/anti-ai-patterns-${language}.md` — add/adjust pattern caps | "'I suggest that' appeared too often — lower the cap to 2" |
+| **C. Pattern reference update** | `${CLAUDE_PLUGIN_ROOT}/skills/write/references/anti-ai-patterns-${language}.md` — add/adjust pattern caps | "'I suggest that' appeared too often — lower the cap to 2" |
 | **D. Source registry fix** | `.academic-helper/sources.json` — correct a bibliographic metadata field | "Cohen 2019 should be 2018 — fix the registry so future runs use the right year" |
 | **E. Memory / known-issue note** | Writes to `.academic-writer/feedback/YYYY-MM-DD-<article-slug>.md` AND the session memory system. Use for observations that don't fit A–D but should carry forward. | "I don't like em-dashes in my writing, ever" |
 
@@ -154,7 +154,7 @@ Spawn via the Agent tool with `subagent_type: voice-miner` if applicable.
 Compute the language suffix:
 ```bash
 LANG_LOWER=$(python3 -c "import json, re; p=open('.academic-helper/profile.md').read(); m=re.search(r'targetLanguage[\"\\s:]+([A-Za-z]+)', p); print((m.group(1) if m else 'hebrew').lower())")
-REF_FILE="plugins/academic-writer/skills/write/references/anti-ai-patterns-${LANG_LOWER}.md"
+REF_FILE="${CLAUDE_PLUGIN_ROOT}/skills/write/references/anti-ai-patterns-${LANG_LOWER}.md"
 ```
 
 Use `Edit` on `$REF_FILE` to:

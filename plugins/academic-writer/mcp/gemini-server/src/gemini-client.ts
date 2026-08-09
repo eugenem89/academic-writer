@@ -41,7 +41,7 @@ const RETRY_MAX_ATTEMPTS = 3;
 const RETRY_BASE_MS = 1000;
 const RETRY_FACTOR = 2;
 
-let cachedKey: string | undefined | null = undefined; // undefined = uncached, null = checked-and-missing
+let cachedKey: string | undefined = undefined; // undefined = uncached (or last resolution found nothing — never trusted as permanent)
 let cachedDefaults: Partial<Record<ToolName, ModelDefaults>> | null = null;
 let cachedClient: GoogleGenAI | null = null;
 
@@ -54,14 +54,20 @@ async function readSecretsKey(): Promise<string | undefined> {
   try {
     const raw = await readFile(secretsPath, 'utf8');
     const parsed: unknown = JSON.parse(raw);
-    if (
-      typeof parsed === 'object' &&
-      parsed !== null &&
-      'google_api_key' in parsed &&
-      typeof (parsed as { google_api_key: unknown }).google_api_key === 'string'
-    ) {
-      const v = (parsed as { google_api_key: string }).google_api_key.trim();
-      return v.length > 0 ? v : undefined;
+    if (typeof parsed === 'object' && parsed !== null) {
+      const obj = parsed as Record<string, unknown>;
+      // Canonical casing is GOOGLE_API_KEY (matches every write-path/setup doc);
+      // accept lowercase google_api_key as a fallback for robustness.
+      const raw =
+        typeof obj['GOOGLE_API_KEY'] === 'string'
+          ? (obj['GOOGLE_API_KEY'] as string)
+          : typeof obj['google_api_key'] === 'string'
+            ? (obj['google_api_key'] as string)
+            : undefined;
+      if (raw) {
+        const v = raw.trim();
+        return v.length > 0 ? v : undefined;
+      }
     }
   } catch {
     // missing/unreadable/invalid JSON — treat as no key
@@ -70,8 +76,37 @@ async function readSecretsKey(): Promise<string | undefined> {
 }
 
 export async function resolveApiKey(): Promise<string | undefined> {
-  if (cachedKey === null) return undefined;
   if (typeof cachedKey === 'string') return cachedKey;
+  // No positive cache hit — always re-resolve rather than trusting a stale
+  // "missing" result. This lets a key written mid-session (or a server
+  // started before the key file existed) be picked up without a restart.
+  // Only successful resolutions are cached.
+  //
+  // Precedence (highest first):
+  //   1. USER_CONFIG_GOOGLE_API_KEY — the plugin's `userConfig.google_api_key`
+  //      (manifests/academic-writer.json), substituted into this process's env
+  //      as `${user_config.google_api_key}` by Claude Code. This is the
+  //      PREFERRED path: Claude Code stores `sensitive: true` userConfig
+  //      values in the OS keychain (or a protected credentials file), never
+  //      plaintext in settings.json. An unconfigured optional userConfig
+  //      field substitutes to an empty string, so this check falls through
+  //      cleanly — it never throws or blocks the paths below.
+  //   2. GOOGLE_API_KEY — plain shell/environment variable (pre-existing
+  //      path; forwarded verbatim through the plugin manifest's `env` block
+  //      too, so a shell export keeps working exactly as before).
+  //   3. .academic-helper/secrets.json — project-local file written by
+  //      /academic-writer:setup or /academic-writer:init (accepts both
+  //      `GOOGLE_API_KEY` and lowercase `google_api_key` — see
+  //      readSecretsKey() below; this is the casing-mismatch fix from a
+  //      prior bug and must not regress).
+  // All three paths are fully supported — userConfig is an ADDITIONAL,
+  // preferred source, not a replacement. A researcher with a working
+  // env-var or secrets.json setup today keeps working unchanged.
+  const fromUserConfig = (process.env.USER_CONFIG_GOOGLE_API_KEY ?? '').trim();
+  if (fromUserConfig) {
+    cachedKey = fromUserConfig;
+    return fromUserConfig;
+  }
   const env = (process.env.GOOGLE_API_KEY ?? '').trim();
   if (env) {
     cachedKey = env;
@@ -82,8 +117,16 @@ export async function resolveApiKey(): Promise<string | undefined> {
     cachedKey = fromSecrets;
     return fromSecrets;
   }
-  cachedKey = null;
   return undefined;
+}
+
+/**
+ * Test-only: clears the module-level key cache so resolveApiKey() re-checks
+ * env/userConfig/secrets.json on the next call instead of returning a cached
+ * value from a previous test. Never called from production code paths.
+ */
+export function __resetApiKeyCacheForTests(): void {
+  cachedKey = undefined;
 }
 
 async function loadProfileModelDefaults(): Promise<Partial<Record<ToolName, ModelDefaults>>> {
@@ -185,14 +228,38 @@ async function getClient(): Promise<GoogleGenAI> {
   return cachedClient;
 }
 
+/** A single part of a multimodal `contents` array — image or text. Vision
+ * callers (gemini_ocr) must order image parts before the text part; see
+ * gemini-client-ocr-helpers.ts's buildOcrParts(). */
+export interface InlineImageContentPart {
+  inlineData: { mimeType: string; data: string };
+}
+export interface TextContentPart {
+  text: string;
+}
+export type GenerateContentPart = InlineImageContentPart | TextContentPart;
+
 export interface GenerateArgs {
   system: string;
+  /** Plain-text prompt. Mutually usable alongside/instead of `parts` — when
+   * `parts` is provided it is sent as `contents` verbatim (already ordered
+   * image-before-text by the caller) and `user` is ignored. */
   user: string;
+  /** Optional multimodal `contents` array (image parts + a trailing text
+   * part) for vision calls. Additive: existing text-only callers
+   * (write_section, synthesize, edit, calibrate_sample, raw) never set this
+   * and keep using `user`. */
+  parts?: GenerateContentPart[];
   model: string;
   thinking_budget: number;
   temperature?: number;
   max_output_tokens?: number;
   response_mime_type?: string;
+  /** Vision-call tuning (gemini_ocr only) — additive, all optional. */
+  topK?: number;
+  thinkingConfig?: { thinkingBudget?: number };
+  generationConfig?: { mediaResolution?: string };
+  responseSchema?: unknown;
 }
 
 export interface GenerateResult {
@@ -230,7 +297,12 @@ async function sleep(ms: number): Promise<void> {
 
 export async function generate(args: GenerateArgs): Promise<GenerateResult> {
   const client = await getClient();
-  const thinkingConfig = buildThinkingConfig(args.model, args.thinking_budget);
+  // args.thinkingConfig (vision callers) overrides the derived 2.5/3.x split
+  // when explicitly provided — e.g. gemini_ocr always wants a bare
+  // `{ thinkingBudget: 0 }` regardless of the model-family branching in
+  // buildThinkingConfig, since OCR is pinned to gemini-2.5-flash (see C6 in
+  // gemini-client-ocr-helpers.ts).
+  const thinkingConfig = args.thinkingConfig ?? buildThinkingConfig(args.model, args.thinking_budget);
 
   const config: Record<string, unknown> = {
     systemInstruction: args.system,
@@ -249,6 +321,17 @@ export async function generate(args: GenerateArgs): Promise<GenerateResult> {
   if (args.response_mime_type) {
     config['responseMimeType'] = args.response_mime_type;
   }
+  if (typeof args.topK === 'number') {
+    config['topK'] = args.topK;
+  }
+  if (args.generationConfig?.mediaResolution) {
+    config['mediaResolution'] = args.generationConfig.mediaResolution;
+  }
+  if (args.responseSchema !== undefined) {
+    config['responseSchema'] = args.responseSchema;
+  }
+
+  const contents = args.parts ?? args.user;
 
   let attempt = 0;
   // eslint-disable-next-line no-constant-condition
@@ -257,7 +340,7 @@ export async function generate(args: GenerateArgs): Promise<GenerateResult> {
     try {
       const resp = await client.models.generateContent({
         model: args.model,
-        contents: args.user,
+        contents,
         config,
       });
       return normalizeResponse(resp);

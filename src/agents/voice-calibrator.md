@@ -130,7 +130,14 @@ The standard session-3 / session-7 calibration behavior below is **unchanged** b
    - `voice.ruleCoverage.warn` ≤ score < `voice.ruleCoverage.pass` → warn user, list flagged rules, offer "remove or supply evidence?" prompt
    - score < `voice.ruleCoverage.block` → block recompress; require user to remove or evidence flagged rules before continuing
 
-6. **Sync to CandleKeep.** Call `voice-sync push`. If `ck` is missing, warn once and continue.
+6. **Record the calibration in the checkpoint.** Set `lastCalibration` in
+   `.academic-helper/voice-checkpoint.json` to `{ "afterSession": <3|7>, "score": X.X, "at":
+   "<iso8601>" }` (schema: `voice/references/checkpoint-schema.md`). If this is the session-3 pass
+   and `mvvReached` is not yet `true`, leave it as-is — the orchestrating `voice` skill is
+   responsible for announcing MVV and flipping that flag, not this agent, to avoid double-announcing
+   if calibration is re-run.
+
+7. **Sync to CandleKeep.** Call `voice-sync push`. If `ck` is missing, warn once and continue.
 
 ## Hard rules
 

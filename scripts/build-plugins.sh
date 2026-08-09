@@ -103,10 +103,10 @@ for manifest in "$MANIFESTS_DIR"/*.json; do
     cp -R "$SRC_DIR/scripts" "$PLUGIN_DIR/"
   fi
 
-  # Copy shared resources
-  if [[ -f "$SRC_DIR/words.md" ]]; then
-    cp "$SRC_DIR/words.md" "$PLUGIN_DIR/"
-  fi
+  # Copy shared resources (per-language linking-words references)
+  for words_file in "$SRC_DIR"/words-*.md; do
+    [[ -f "$words_file" ]] && cp "$words_file" "$PLUGIN_DIR/"
+  done
 
   # Copy thresholds
   if [[ -f "$SRC_DIR/thresholds.json" ]]; then
@@ -115,8 +115,11 @@ for manifest in "$MANIFESTS_DIR"/*.json; do
 
   # Generate plugin.json — read recognized plugin.json fields FROM the manifest.
   # Only the schema-recognized keys are emitted (Official Docs p.114):
-  #   name, version, description, author, homepage, repository, license, keywords, mcpServers.
+  #   name, version, description, author, homepage, repository, license, keywords,
+  #   mcpServers, userConfig.
   # mcpServers is copied through verbatim so the bundled MCP server is registered.
+  # userConfig is copied through verbatim so Claude Code prompts for (and securely
+  # stores) declared options like the Gemini API key at plugin-enable time.
   # author/homepage/repository/license/keywords fall back to defaults only when absent.
   jq '{
     name: .name,
@@ -128,7 +131,8 @@ for manifest in "$MANIFESTS_DIR"/*.json; do
     license: (.license // "MIT"),
     keywords: (.keywords // ["academic-writing","humanities","citations","claude-code","plugin"])
   }
-  + (if .mcpServers then { mcpServers: .mcpServers } else {} end)' \
+  + (if .mcpServers then { mcpServers: .mcpServers } else {} end)
+  + (if .userConfig then { userConfig: .userConfig } else {} end)' \
     "$manifest" > "$PLUGIN_DIR/.claude-plugin/plugin.json"
 
   # Generate commands from user-invocable skills
@@ -138,14 +142,16 @@ for manifest in "$MANIFESTS_DIR"/*.json; do
       if grep -q "^user-invocable: *true" "$skill_md"; then
         skill_name=$(basename "$(dirname "$skill_md")")
         mkdir -p "$PLUGIN_DIR/commands"
-        # Extract description and allowed-tools from frontmatter using awk
+        # Extract description, allowed-tools, and disable-model-invocation from frontmatter using awk
         description=$(awk '/^---$/{n++; next} n==1 && /^description:/{sub(/^description: *"?/,""); sub(/"$/,""); print; exit}' "$skill_md")
         allowed_tools=$(awk '/^---$/{n++; next} n==1 && /^allowed-tools:|^allowedTools:/{sub(/^(allowed-tools|allowedTools): */,""); print; exit}' "$skill_md")
+        disable_model_invocation=$(awk '/^---$/{n++; next} n==1 && /^disable-model-invocation:/{sub(/^disable-model-invocation: */,""); print; exit}' "$skill_md")
         [[ -z "$allowed_tools" ]] && allowed_tools="[Bash, Read, Write, Edit, Glob, Grep]"
         {
           echo "---"
           echo "description: $description"
           echo "allowed-tools: $allowed_tools"
+          [[ "$disable_model_invocation" == "true" ]] && echo "disable-model-invocation: true"
           echo "---"
           echo ""
           echo "# Auto-generated from skills/$skill_name/SKILL.md"

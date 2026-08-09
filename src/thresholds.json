@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Single source of truth for all numeric quality gates. Edit here; every skill and agent references this file.",
+  "description": "Single source of truth for all numeric quality gates (anti-AI scoring, self-review, rewrite limits, paragraph/unit word bounds, style-fingerprint compliance, voice rule-coverage/corpus minimums, typography). Edit here; every skill and agent references this file. Gemini model/thinking-budget defaults and retry policy are NOT read from here — they live in SPEC_DEFAULTS in plugins/academic-writer/mcp/gemini-server/src/gemini-client.ts (overridable per-project via profile.md), and the retry constants are hardcoded in that same file.",
   "antiAi": {
     "minScore": 35,
     "maxScore": 50,
@@ -52,26 +52,5 @@
       "minTermLength": 2
     },
     "_comment": "dashReplacement is the default em/en-dash fix convention used by detect-ai-typography.py (values: hyphen|comma|colon|remove); overridable via --dash-replacement. topFrequentTermsCount/minTermLength configure extract-style-metrics.py's frequentTerms extraction."
-  },
-  "gemini": {
-    "maxOutputTokens": {
-      "write_section": 16384,
-      "synthesize": 8192,
-      "edit": 4096,
-      "calibrate_sample": 2048,
-      "raw": 8192
-    },
-    "retry": {
-      "maxAttempts": 3,
-      "baseBackoffMs": 1000,
-      "exponentialFactor": 2
-    },
-    "models": {
-      "write_section": { "model": "gemini-2.5-pro", "thinking_budget": 8192 },
-      "synthesize":    { "model": "gemini-2.5-flash", "thinking_budget": 2048 },
-      "edit":          { "model": "gemini-2.5-pro", "thinking_budget": 4096 },
-      "calibrate_sample": { "model": "gemini-2.5-flash", "thinking_budget": 2048 },
-      "raw":           { "model": "gemini-2.5-pro", "thinking_budget": -1 }
-    }
   }
 }

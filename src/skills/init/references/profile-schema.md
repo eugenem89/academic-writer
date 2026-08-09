@@ -53,7 +53,7 @@ PYTHON
 
 `author_key`: kebab-case slug derived from the researcher's full name, stable across projects for
 the same author, used to key cross-project CandleKeep voice-profile lookups (see
-`src/skills/voice/voice-sync.sh`). Derived once during `init` Phase 2 Step 1 and confirmed with the
+`${CLAUDE_PLUGIN_ROOT}/skills/voice/voice-sync.sh`). Derived once during `init` Phase 2 Step 1 and confirmed with the
 user; should not be changed casually afterward since it identifies the author's CandleKeep
 `Voice Profile — <author_key>` book across every project.
 
@@ -109,7 +109,20 @@ updatedAt: ISO_TIMESTAMP
 ```json
 []
 ```
+
+## Gemini
+
+```json
+{
+  "enabled": true,
+  "approvedLanguages": [],
+  "models": {}
+}
 ```
+```
+
+`## Gemini` reflects the outcome of `init` Phase 3.5: `enabled: false` (no `approvedLanguages`/
+`models` keys) if the researcher chose "No, Claude only".
 
 ## 25-Dimension Style Analysis Rubric
 

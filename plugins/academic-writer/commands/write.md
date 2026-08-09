@@ -10,6 +10,30 @@ allowed-tools: [Bash, Read, Write, Glob, Grep, Agent, AskUserQuestion]
 
 You are an academic writing assistant for a Humanities researcher.
 
+**Preflight**: If you haven't run `/academic-writer:setup` yet, run that first — it configures your Gemini key and Python tools in a few guided questions.
+
+<!-- BEGIN voice-precondition-gate -->
+### Voice profile precondition gate (mandatory — run before Step 1)
+
+Before any drafting and before the "Voice profile load" step below, verify `AUTHOR_VOICE.md`
+actually has real content — not missing, and not still the unpopulated stub:
+
+```bash
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check-voice-populated.py AUTHOR_VOICE.md
+```
+
+- **Exit 0** (populated): continue to the "Voice profile load" step immediately below.
+- **Exit 1** (stub/missing): **STOP the `/write` pipeline** — do not proceed to Step 1 or spawn
+  any agent. Tell the user: "Your voice profile isn't set up yet. Run `/academic-writer:voice` to
+  build it, then re-run `/write`."
+- **Exit 2** (usage/encoding error): also **STOP**. Exit 2 is treated as a block, not success —
+  fail closed, since we cannot confirm voice is populated. Tell the user: "AUTHOR_VOICE.md could
+  not be read/parsed — check the file for corruption, or run `/academic-writer:voice` to
+  regenerate it."
+
+This gate is authoritative for all three outcomes; it replaces any older warn-and-continue
+behavior for this condition.
+<!-- END voice-precondition-gate -->
 
 ### Voice profile load (first step of every run)
 
@@ -18,75 +42,20 @@ You are an academic writing assistant for a Humanities researcher.
 3. The section writer is instructed to weight `## Academic-specific` rules higher when they
    conflict with `## Core voice` rules; everything else applies as written.
 
-If `AUTHOR_VOICE.md` is missing or empty, warn once: "No voice profile. Run `/academic-writer:init`
-to seed it." Do not block writing.
-
 
 ### Gemini pre-flight (immediately after voice profile load)
 
-Determine which model runs the prose for this article and whether a calibration gate must fire first.
+Determine which model runs the prose for this article and whether a calibration gate must fire
+first. This must run **after** Step 1 (Subject & Language) captures `targetLanguage` but **before**
+Step 3 (Deep Read) — i.e. before any agent is spawned. In short: read the profile's
+`approvedLanguages`, detect whether a Gemini key is available, and either proceed on Gemini, proceed
+on Claude, or invoke voice-calibrator to gate an unapproved language; persist the chosen
+`geminiMode` to `.academic-helper/session-state.json`. Full decision table and exact commands: see
+`references/gemini-preflight.md`.
 
-1. Read the approved-language list from the profile:
-
-```bash
-python3 -c "
-import re, json
-content = open('.academic-helper/profile.md').read() if __import__('os').path.exists('.academic-helper/profile.md') else ''
-m = re.search(r'## Gemini\n+\x60\x60\x60json\n(.*?)\n\x60\x60\x60', content, re.DOTALL)
-data = json.loads(m.group(1)) if m else {}
-print(json.dumps(data.get('approvedLanguages', [])))
-"
-```
-
-2. Detect whether a Gemini key is available:
-
-```bash
-if [ -n "$GOOGLE_API_KEY" ]; then
-  echo "GEMINI_KEY: env"
-elif [ -f .academic-helper/secrets.json ] && python3 -c "import json,sys; sys.exit(0 if json.load(open('.academic-helper/secrets.json')).get('GOOGLE_API_KEY') else 1)" 2>/dev/null; then
-  echo "GEMINI_KEY: file"
-else
-  echo "GEMINI_KEY: missing"
-fi
-```
-
-3. Decide the path. After Step 1 of Phase 1 captures `targetLanguage`:
-
-| GEMINI_KEY | targetLanguage in approvedLanguages | Action |
-|---|---|---|
-| missing | n/a | Warn once: "No Gemini key configured. Running on Claude. Run `/academic-writer:setup` to enable Gemini." Set `geminiMode = "claude-only"`. Proceed. |
-| present | yes | Set `geminiMode = "gemini"`. Proceed. |
-| present | no | **Invoke voice-calibrator with `--compare-models {targetLanguage}` BEFORE continuing.** Wait for its `approved | rejected | error` status. On `approved` set `geminiMode = "gemini"`; on `rejected` set `geminiMode = "claude-only"` for this session (don't ask again this run); on `error` warn once and set `geminiMode = "claude-only"`. |
-
-Persist the chosen mode in `.academic-helper/session-state.json` so subagents and later steps see the same decision:
-
-```bash
-mkdir -p .academic-helper
-python3 -c "
-import json, pathlib
-p = pathlib.Path('.academic-helper/session-state.json')
-state = json.loads(p.read_text()) if p.exists() else {}
-state['geminiMode'] = '$GEMINI_MODE'
-state['geminiFallback'] = state.get('geminiFallback', False)
-p.write_text(json.dumps(state, indent=2))
-"
-```
-
-The calibration gate must run **after** Step 1 (Subject & Language) but **before** Step 3 (Deep Read) — i.e., as soon as `targetLanguage` is known and before any agent is spawned. If it runs at any other point, it cannot influence section-writer or synthesizer.
-
-
-### Mid-run Gemini failure handler
-
-The first time any MCP tool call (`gemini_write_section`, `gemini_synthesize`, `gemini_edit`, `gemini_calibrate_sample`) returns a structured error during this `/write` run, ask the user **once** using AskUserQuestion:
-
-> "Gemini failed: {error.message}. Continue this article on Claude, or abort and retry later?"
-
-Options: `Continue on Claude` | `Abort`.
-
-- On **Continue on Claude**: set `.academic-helper/session-state.json > geminiFallback: true`. Subsequent MCP failures during this run respect the choice — do NOT re-ask. Subagents spawned after this point receive `geminiFallback: true` in their prompt; section-writer and synthesizer skip the Gemini path and use their fallback branches.
-- On **Abort**: stop the pipeline cleanly; do NOT write a partial DOCX.
-
-If `geminiFallback` is already `true` at the start of the run (carried over from a prior run in the same session), skip the question entirely and run subagents in fallback mode from the start.
+Also covered in that reference: the **mid-run Gemini failure handler** — the one-time
+AskUserQuestion prompt fired the first time a Gemini MCP call errors during this run, and how the
+resulting `geminiFallback` choice propagates to subagents.
 
 
 ## Load Profile
@@ -153,10 +122,6 @@ If the file does not exist, proceed with Phase 1 normally.
 
 
 ```bash
-# Validate wf_write_article has nodes — if empty, re-register from plugin cache
-if [ "$_AW_NODES" -eq 0 ]; then
-  _AW_DIR=$(find ~/.claude/plugins/cache -name "wf_write_article.json" -path "*/workflows/*" 2>/dev/null | head -1 | xargs dirname 2>/dev/null)
-fi
 echo '{"subject": "pending", "phase": "conversational"}' > /tmp/aw-run-input.json
 ```
 
@@ -354,44 +319,26 @@ The 8-skill quality pipeline (style fingerprint compliance, grammar, anti-AI, ci
 
 #### Step 6.0: Engine commit (run BEFORE the parallel spawn)
 
-Because all section-writers are spawned in a single parallel response (below), the engine decision must be **final before the spawn** — once the batch is in flight, `geminiFallback` can no longer be made consistent across writer units. Commit the whole run to one engine here:
+Before spawning any section-writer, commit the whole run to ONE engine (Gemini or Claude-only) by
+live-probing Gemini (not just checking the key file) and writing the result to
+`.academic-helper/session-state.json > geminiFallback`. Never mix engines across writer units in
+the same run. Full probe procedure and exact commands: see `references/section-writer-dispatch.md`.
 
-1. **Verify the Gemini tool is actually registered**, not merely that `GOOGLE_API_KEY` is set. A key can be present while the plugin's `mcp__gemini-api__*` MCP tools are absent from your toolset (e.g., the server failed to register). Check whether `mcp__gemini-api__gemini_write_section` appears in your available tools. Optionally, fire one tiny probe call (e.g., `gemini_calibrate_sample` with a trivial input) to confirm the server responds.
-2. **If `geminiMode` is `"gemini"` but the tool is unavailable** (or the probe errors), set `.academic-helper/session-state.json > geminiFallback: true` now — before spawning. The user has already been asked once during the mid-run failure handler / pre-flight, so do not re-ask here; this is a registration check, not a runtime failure.
-3. **Read the committed `geminiFallback` value once**, and pass that SAME value to EVERY section-writer spawned for EVERY writer unit in the parallel batch below.
-
-> **Never mix engines across writer units — decide once, before the parallel spawn, and pass `geminiFallback` uniformly.** Every writer unit across every section must run on the same engine; a half-Gemini/half-Claude article cannot be style-unified by the synthesizer.
+#### Spawning section-writers
 
 **CRITICAL: Use the Agent tool to spawn one `section-writer` subagent per WRITER UNIT. Call the Agent tool multiple times in a single response — one call per unit — so all writer units write in parallel.**
 
-A section with no `units` array in the approved outline is itself a single writer unit — spawn exactly one subagent for it, same as before. A section WITH a `units` array is NOT itself spawned directly — spawn one subagent per entry in its `units` array instead. The parallel fan-out count for this step is therefore the total number of writer units across the whole outline, which may exceed the number of top-level sections.
+A section with no `units` array in the approved outline is itself a single writer unit — spawn exactly one subagent for it. A section WITH a `units` array is NOT itself spawned directly — spawn one subagent per entry in its `units` array instead. The parallel fan-out count for this step is therefore the total number of writer units across the whole outline, which may exceed the number of top-level sections.
 
-For each writer unit in the approved outline, the Agent tool prompt must include:
-- `unit`: the writer unit's own spec — its `id`, `claim`, `evidence`, `depends_on`, `thesis_link`, `argument_role`, and target words (from thresholds.json's `writerUnit` fields, e.g. `writerUnit.targetWords`)
-- `parentSection`: the parent section's overall brief/thesis-link context (title, `argument_role`, `thesis_link`) — for a section with no `units` array, this can mirror the unit's own info or be omitted as trivial
-- `siblingUnitsSummary`: a short summary of sibling units' briefs/claims within the same section, so prose transitions flow naturally between subsections — only relevant/non-empty when the section has multiple units
-- `sectionIndex`: the PARENT section's number in the outline
-- `totalSections`: total top-level section count
-- `unitIndex` / `unitId`: the unit's own id within its parent section (e.g. `"II.1"`)
-- `totalUnitsInSection`: how many writer units the parent section contains
-- `thesis`: the article thesis
-- `articleStructure`: the researcher's structure conventions
-- `citationStyle`: from the profile
-- `targetLanguage`: from the profile
-- `targetWordCount`: the requested article length (so each unit is sized proportionally)
-- `tools`: the enabled tools
-- `priorSectionTexts`: text of all previously completed sections/units (for repetition awareness)
-- `outlineOverview`: full outline titles and roles
-- `userDraftParagraphs`: (if `userDraftAsOutline = true`) the user's draft text for this unit — agents expand this rather than writing from scratch
-- `geminiFallback`: the value committed in Step 6.0 above (read from `.academic-helper/session-state.json`). Pass the SAME value to every section-writer in this batch — never spawn some units with `true` and others with `false`.
+The exact prompt fields each spawn needs (`unit`, `parentSection`, `siblingUnitsSummary`,
+`sectionIndex`, `totalSections`, `unitIndex`/`unitId`, `totalUnitsInSection`, `thesis`,
+`articleStructure`, `citationStyle`, `targetLanguage`, `targetWordCount`, `tools`,
+`priorSectionTexts`, `outlineOverview`, `userDraftParagraphs`, `geminiFallback`) and the four values
+section-writers load directly from disk instead (`styleFingerprint`, `linkingWords`,
+`sourcesRegistry`, `evidenceOwnership`) are listed in full in `references/section-writer-dispatch.md`
+— read it before constructing the spawn prompts.
 
-**NOTE:** Do NOT pass `styleFingerprint`, `linkingWords`, `sourcesRegistry`, or `evidenceOwnership` in the prompt — section-writer agents load all four directly from disk to reduce context size:
-- Fingerprint from `.academic-helper/profile.md`
-- Linking words from `plugins/academic-writer/words.md`
-- Source registry from `.academic-helper/sources.json` (deep-reader output)
-- Evidence ownership map from `.academic-helper/evidence-ownership.json` (architect output)
-
-Each section-writer handles a **per-paragraph 8-skill pipeline** internally — in order: Draft → Style Compliance → Hebrew Grammar → Academic Language → Language Purity → Anti-AI → Repetition Check → Citation Audit (logged per paragraph as `section_N_p_M_<skill>`). The authoritative contract for that pipeline — exact skill behavior, the 220-word ceiling, the `thresholds.json`-driven anti-AI gate, and the auditor hard gate (Citation Audit / Skill 8) — lives in the `section-writer` agent definition (`src/agents/section-writer.md`). Do not duplicate or override it here; the orchestrator only spawns section-writers and waits for their results.
+Each section-writer handles a **per-paragraph 8-skill pipeline** internally — in order: Draft → Style Compliance → Grammar Check (language-specific, dispatched by `targetLanguage`) → Academic Language → Language Purity → Anti-AI → Repetition Check → Citation Audit (logged per paragraph as `section_N_p_M_<skill>`). The authoritative contract for that pipeline — exact skill behavior, the 220-word ceiling, the `thresholds.json`-driven anti-AI gate, and the auditor hard gate (Citation Audit / Skill 8) — lives in the `section-writer` agent definition (`${CLAUDE_PLUGIN_ROOT}/agents/section-writer.md`). Do not duplicate or override it here; the orchestrator only spawns section-writers and waits for their results.
 
 After receiving each section-writer result (per writer unit), mark node complete:
 
@@ -478,111 +425,45 @@ DOCX_PATH="articles/${FILEBASE}.docx"
 
 #### Step 9a: Markdown Output
 
-Use the `Write` tool to write the article as markdown to `$MD_PATH`. Structure:
+Use the `Write` tool to write the article as markdown to `$MD_PATH` — title as H1, thesis as an
+italic line below it, section headings as H2 (only when `totalWords > 1500`), inline citations kept
+exactly as they appear. Exact structure template and full rules: see
+`references/docx-generation.md#step-9a-markdown-output`.
 
-```markdown
-# ARTICLE_TITLE
+#### Step 9a.5: Hebrew Punctuation Validation (mandatory quality gate)
 
-*ARTICLE_THESIS*
+Before generating the DOCX, run the deterministic punctuation validator over the markdown file just written:
 
-## תקציר
-
-[Abstract text from Step 8.5]
-
-[If dual-language: second abstract under its own heading]
-
-## Section Title (only if totalWords > 1500)
-
-Paragraph 1 text with inline citations...
-
-Paragraph 2 text...
-
-## Next Section Title
-
-...
+```bash
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/validate-hebrew-punctuation.py "$MD_PATH"
 ```
 
-**Rules:**
-- Title as `# H1`, thesis as italic line below it
-- Section headings as `## H2` — but only include them if `totalWords > 1500` (same rule as DOCX)
-- Paragraphs separated by blank lines
-- Keep all inline citations exactly as they appear (e.g., `(Author, Title, p. N)`)
-- No extra formatting beyond what the article text already contains
+This checks logical bracket/paren/quote balance and flags mixed gershayim/straight-quote characters and likely-missing bidi marks around embedded Latin/digit runs — the exact class of defect that causes mismatched parentheses and quotation marks in the rendered DOCX.
+
+- **If the script exits non-zero**, review each reported violation and fix the source markdown (do not proceed to DOCX generation with known punctuation defects still present).
+- **If the script exits 0**, continue to Step 9b.
+
+This gate is mandatory for any article containing Hebrew text — it is not optional and must not be skipped even under time pressure.
 
 #### Step 9b: DOCX Output
 
 Write the article data to a JSON file, then run the standalone DOCX generator script:
 
-1. **Write the article JSON** using the Write tool to `/tmp/aw-article-data.json`. Use this exact schema — do NOT write inline Python to construct it:
-
-```json
-{
-  "title": "ARTICLE_TITLE from synthesizer",
-  "thesis": "ARTICLE_THESIS or null",
-  "abstract": {
-    "primary": "Abstract text in targetLanguage (from Step 8.5)",
-    "secondary": "Optional abstract in second language, or null"
-  },
-  "sections": [
-    {
-      "title": "Section title",
-      "paragraphs": [
-        {
-          "text": "Paragraph body with NO inline parenthetical citations.",
-          "footnotes": [
-            { "after": "substring in text to anchor the superscript marker", "text": "Author, Title (Pub, 2024), p. 42." }
-          ]
-        }
-      ]
-    }
-  ],
-  "format": {
-    "font": "from profile.outputFormatPreferences.font or David",
-    "bodySize": 11,
-    "titleSize": 16,
-    "headingSize": 13,
-    "lineSpacing": 1.5,
-    "margins": 1.0,
-    "isRtl": true
-  },
-  "totalWords": 0
-}
-```
-
-**Rules:**
-- Use the `Write` tool to write this file — never use Python heredoc or `python3 -c` to construct JSON (Hebrew text causes UTF-8 encoding errors in heredocs)
-- Populate `sections` from the synthesizer output — each section's title and paragraph list
-- Paragraphs use the structured form `{text, footnotes[]}`. Strip the parenthetical citations out of `text` and move each citation into `footnotes[]` with `after` set to a unique substring in `text` where the marker should appear. The DOCX generator renders them as native Word footnotes (superscript in body, text at page bottom). Plain strings are still accepted for backward compatibility (no footnotes)
-- Dependency: requires `lxml` (`pip install lxml`) in addition to `python-docx`
-- Read `outputFormatPreferences` from the profile and fill in the `format` object
-- Set `totalWords` to the actual word count (controls section title visibility — hidden when under 1500 words)
-- Set `isRtl` based on `targetLanguage` (true for Hebrew, false for English)
+1. **Write the article JSON** using the `Write` tool to `/tmp/aw-article-data.json` — never inline
+   Python/heredoc (Hebrew text causes UTF-8 encoding errors in heredocs). Exact JSON schema and
+   population rules (footnote structuring, `format` object, `totalWords`, `isRtl`): see
+   `references/docx-generation.md#step-9b-docx-output--article-json-schema`.
 
 2. **Generate the DOCX:**
 
 ```bash
-python3 plugins/academic-writer/scripts/generate-docx.py --input /tmp/aw-article-data.json --output "$DOCX_PATH"
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/generate-docx.py --input /tmp/aw-article-data.json --output "$DOCX_PATH"
 ```
 
 The script handles all RTL formatting, directional marks, citation parentheses splitting, and conditional section titles deterministically.
 
 Log output completion:
 
-
-Report to researcher:
-> "Done! Your article has been saved to:
-> - `articles/FILEBASE.docx` (formatted document)
-> - `articles/FILEBASE.md` (markdown)
->
-> Word count: [N] words
-> Citations: [N] ([citationStyle] format)
-> Sections: [N]
-> Language: [targetLanguage]
->
-> Quality checks applied per paragraph:
-> - Style fingerprint compliance: avg [N]/5 score, [N] adjustments
-> - Hebrew grammar: [N] issues fixed
-> - Language purity: [N] foreign-term violations fixed
-> - Repetition: [N] instances fixed
-> - Citation audits: [N] claims verified, [N] rejections resolved
->
+Report completion to the researcher — word count, citation count, section count, language, and a
+per-check summary of quality-gate outcomes. Exact template: see
+`references/docx-generation.md#closing-report-template`.

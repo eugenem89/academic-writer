@@ -8,7 +8,8 @@ export type ErrorCode =
   | 'api_error'
   | 'transient'
   | 'validation'
-  | 'bundle_load_failed';
+  | 'bundle_load_failed'
+  | 'ocr_failed';
 
 export interface StructuredError {
   code: ErrorCode;
@@ -20,7 +21,9 @@ export function noCredentials(): StructuredError {
   return {
     code: 'no_credentials',
     message:
-      'No Gemini API key found. Set GOOGLE_API_KEY in your environment or run /academic-writer:setup to configure .academic-helper/secrets.json.',
+      'No Gemini API key found. Run /academic-writer:setup to configure one — the plugin\'s ' +
+      'secure "Gemini API key" setting (config option google_api_key) is preferred, or set ' +
+      'GOOGLE_API_KEY in your environment, or store it in .academic-helper/secrets.json.',
   };
 }
 
@@ -38,6 +41,16 @@ export function validation(message: string, details?: Record<string, unknown>): 
 
 export function bundleLoadFailed(message: string, details?: Record<string, unknown>): StructuredError {
   return { code: 'bundle_load_failed', message, details };
+}
+
+/**
+ * OCR-specific failure: bad finishReason, subprocess (detect/rasterize)
+ * failure, or an oversized-payload path we haven't wired (File API TODO).
+ * Always phrase `message` as an action the caller can take, never a raw
+ * code/status (see gemini_ocr.ts's finishReason mapping for the pattern).
+ */
+export function ocrFailed(message: string, details?: Record<string, unknown>): StructuredError {
+  return { code: 'ocr_failed', message, details };
 }
 
 export function toToolResult(err: StructuredError): {

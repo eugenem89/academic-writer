@@ -4,13 +4,13 @@
 > from:
 > - [`anti-ai-patterns-english.md`](./anti-ai-patterns-english.md) — patterns/phrases to **AVOID**
 >   (AI-writing tells, formulaic hedging, inflated language, capped per-article).
-> - [`../../../words.md`](../../../words.md) — the **banned terms** list enforced across the
->   pipeline (terms that must never appear; see also the `bannedTerms` block loaded from
->   `profile.md`).
+> - [`../../../words-english.md`](../../../words-english.md) — the **linking words** reference
+>   (connectives every paragraph must draw from; distinct from the separate `bannedTerms` block
+>   loaded from `profile.md`, which lists terms that must never appear).
 >
 > Where the anti-ai and banned-terms files tell the writer what to strike, this file tells the
 > writer what to reach for instead — genuine, discipline-appropriate Humanities academic register
-> in English. It is loaded by the section-writer (`src/agents/section-writer.md`) and by the
+> in English. It is loaded by the section-writer (`${CLAUDE_PLUGIN_ROOT}/agents/section-writer.md`) and by the
 > Gemini `write-section` prompt's calibration bundle, for articles where `targetLanguage` is
 > English. Consult it before and while drafting, not as a post-hoc find-and-replace pass.
 

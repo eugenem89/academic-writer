@@ -1,169 +1,520 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "description": "Feature inventory for the academic-writer plugin. A checklist for future audits: each top-level feature lists its subfeatures, the source of truth, runtime status, and known issues. status: ok | partial | broken | missing. Regenerate/extend this file whenever features are added or removed.",
-  "generatedAt": "2026-07-02T19:40:00Z",
+  "generatedAt": "2026-08-09T10:12:00Z",
   "pluginVersion": "0.5.0",
   "features": [
     {
       "id": "onboarding",
       "name": "Onboarding / profile setup",
-      "sources": ["src/skills/init/SKILL.md", "src/skills/setup/SKILL.md", "src/skills/init/references/profile-schema.md", "src/skills/init/references/integration-setup.md"],
+      "sources": [
+        "src/skills/init/SKILL.md",
+        "src/skills/setup/SKILL.md",
+        "src/skills/init/references/profile-schema.md",
+        "src/skills/init/references/integration-setup.md"
+      ],
       "status": "ok",
       "subfeatures": [
-        {"id": "init-wizard", "name": "Init wizard (Preflight, Integrations, Profile incl. author_key, Gemini Onboarding, Style Analysis, Sources) with --quick mode", "status": "ok"},
-        {"id": "setup-quick", "name": "setup skill — now a thin non-invocable wrapper pointing to /academic-writer:init --quick", "status": "ok", "issue": "Duplication resolved by folding setup's phases into init's --quick mode; setup itself carries no phase logic and is user-invocable: false"},
-        {"id": "integration-detect", "name": "Auto-detect Candlekeep/NotebookLM/Gemini", "status": "ok"},
-        {"id": "computational-fingerprint", "name": "extract-style-metrics.py computational metrics", "status": "ok", "issue": "src/scripts/extract-style-metrics.py now exists and emits computationalMetrics + frequentTerms; surfaced into profile.md's Style Fingerprint section by init"},
-        {"id": "hebrew-baseline-fetch", "name": "Fetch Hebrew linguistic baseline from CandleKeep", "status": "ok", "issue": "Now looked up by exact title (\"Hebrew Linguistic Reference\") via `ck items list --json | jq`, with a loud warning + manual-search instruction if the lookup fails or is ambiguous, and the old hardcoded id kept only as a documented, never-silent last-resort fallback"},
-        {"id": "source-indexing", "name": "Index + enrich Candlekeep library", "status": "ok"}
+        {
+          "id": "init-wizard",
+          "name": "Init wizard (Preflight, Integrations, Profile incl. author_key, Gemini Onboarding, Style Analysis, Sources) with --quick mode",
+          "status": "ok"
+        },
+        {
+          "id": "setup-quick",
+          "name": "setup skill — standalone interview-driven onboarding wizard (Gemini key incl. live-tested GOOGLE_API_KEY, Python deps, optional CandleKeep/NotebookLM detection, sample-paragraph checkpoint)",
+          "status": "ok",
+          "issue": "Reworked in commit 97594b9 (a3): setup is no longer a thin wrapper delegating to init --quick. It is user-invocable: true (src/skills/setup/SKILL.md:4) and a full independent 267-line, one-question-at-a-time wizard with its own preflight, Gemini key live-test via mcp__gemini-api__gemini_raw, and closing profile summary; init/SKILL.md:12 and setup/SKILL.md:13 cross-reference each other for the deeper vs quick path instead of one delegating to the other. Both remain safe to re-run and interoperate via the shared profile schema. Step 3 (Gemini API key) now offers plugin configuration (claude plugin install/config --config google_api_key=...) as the recommended, securely-stored option alongside the pre-existing env-var and secrets.json choices; init/SKILL.md Phase 3.5 mirrors the same three options for consistency."
+        },
+        {
+          "id": "integration-detect",
+          "name": "Auto-detect Candlekeep/NotebookLM/Gemini",
+          "status": "ok"
+        },
+        {
+          "id": "computational-fingerprint",
+          "name": "extract-style-metrics.py computational metrics",
+          "status": "ok",
+          "issue": "src/scripts/extract-style-metrics.py now exists and emits computationalMetrics + frequentTerms; surfaced into profile.md's Style Fingerprint section by init"
+        },
+        {
+          "id": "hebrew-baseline-fetch",
+          "name": "Fetch Hebrew linguistic baseline from CandleKeep",
+          "status": "ok",
+          "issue": "Now looked up by exact title (\"Hebrew Linguistic Reference\") via `ck items list --json | jq`, with a loud warning + manual-search instruction if the lookup fails or is ambiguous, and the old hardcoded id kept only as a documented, never-silent last-resort fallback"
+        },
+        {
+          "id": "source-indexing",
+          "name": "Index + enrich Candlekeep library",
+          "status": "ok"
+        }
       ]
     },
     {
       "id": "voice",
       "name": "Voice subsystem (author style profile)",
-      "sources": ["src/skills/voice/SKILL.md", "src/skills/voice/voice-sync.sh", "src/skills/voice/voice-migrate.sh", "src/skills/voice/questions-academic.md", "src/agents/voice-miner.md", "src/agents/voice-distiller.md", "src/agents/voice-calibrator.md", "src/agents/voice-interviewer.md", "AUTHOR_VOICE.md"],
+      "sources": [
+        "src/skills/voice/SKILL.md",
+        "src/skills/voice/voice-sync.sh",
+        "src/skills/voice/voice-migrate.sh",
+        "src/skills/voice/questions-academic.md",
+        "src/agents/voice-miner.md",
+        "src/agents/voice-distiller.md",
+        "src/agents/voice-calibrator.md",
+        "src/agents/voice-interviewer.md",
+        "AUTHOR_VOICE.md"
+      ],
       "status": "partial",
       "subfeatures": [
-        {"id": "stage1-mine", "name": "Stage 1: voice-miner reads corpus → fingerprint.md", "status": "ok"},
-        {"id": "stage1-distill", "name": "voice-distiller seeds AUTHOR_VOICE.md", "status": "ok"},
-        {"id": "stage2-interview", "name": "Stage 2: 7-session adversarial interview", "status": "ok"},
-        {"id": "voice-calibrate", "name": "voice-calibrator model comparison gate", "status": "ok"},
-        {"id": "cross-project-share", "name": "Share one author's voice across projects", "status": "ok", "issue": "Sync is now keyed by the stable author_key field in .academic-helper/profile.md (derived from the researcher's name during init, confirmed via AskUserQuestion); voice-sync.sh fails loudly (exit 1, no silent <unknown> fallback) if author_key is missing. Still CandleKeep-only for cross-project persistence, which is expected given the no-$HOME rule"},
-        {"id": "candlekeep-sync", "name": "voice-sync.sh pull/push (last-write-wins)", "status": "ok"},
-        {"id": "legacy-migrate", "name": "voice-migrate.sh legacy AUTHOR_VOICE migration", "status": "ok"}
+        {
+          "id": "stage1-mine",
+          "name": "Stage 1: voice-miner reads corpus → fingerprint.md",
+          "status": "ok"
+        },
+        {
+          "id": "stage1-distill",
+          "name": "voice-distiller seeds AUTHOR_VOICE.md",
+          "status": "ok"
+        },
+        {
+          "id": "stage2-interview",
+          "name": "Stage 2: 7-session adversarial interview",
+          "status": "ok"
+        },
+        {
+          "id": "voice-calibrate",
+          "name": "voice-calibrator model comparison gate",
+          "status": "ok"
+        },
+        {
+          "id": "cross-project-share",
+          "name": "Share one author's voice across projects",
+          "status": "ok",
+          "issue": "Sync is now keyed by the stable author_key field in .academic-helper/profile.md (derived from the researcher's name during init, confirmed via AskUserQuestion); voice-sync.sh fails loudly (exit 1, no silent <unknown> fallback) if author_key is missing. Still CandleKeep-only for cross-project persistence, which is expected given the no-$HOME rule"
+        },
+        {
+          "id": "candlekeep-sync",
+          "name": "voice-sync.sh pull/push (last-write-wins)",
+          "status": "ok"
+        },
+        {
+          "id": "legacy-migrate",
+          "name": "voice-migrate.sh legacy AUTHOR_VOICE migration",
+          "status": "ok"
+        }
       ]
     },
     {
       "id": "research",
       "name": "Research / evidence gathering",
-      "sources": ["src/skills/research/SKILL.md", "src/skills/ideate/SKILL.md", "src/agents/deep-reader.md"],
+      "sources": [
+        "src/skills/research/SKILL.md",
+        "src/skills/ideate/SKILL.md",
+        "src/agents/deep-reader.md"
+      ],
       "status": "ok",
       "subfeatures": [
-        {"id": "deep-read", "name": "deep-reader explores sources → sources.json registry", "status": "ok"},
-        {"id": "chapter-coverage", "name": "Chapter-coverage completeness map", "status": "ok"},
-        {"id": "notebooklm-query", "name": "NotebookLM thematic query (supplementary)", "status": "ok"},
-        {"id": "ideate", "name": "Frame a research question", "status": "ok"}
+        {
+          "id": "deep-read",
+          "name": "deep-reader explores sources → sources.json registry",
+          "status": "ok"
+        },
+        {
+          "id": "chapter-coverage",
+          "name": "Chapter-coverage completeness map",
+          "status": "ok"
+        },
+        {
+          "id": "notebooklm-query",
+          "name": "NotebookLM thematic query (supplementary)",
+          "status": "ok"
+        },
+        {
+          "id": "ideate",
+          "name": "Frame a research question",
+          "status": "ok"
+        }
       ]
     },
     {
       "id": "architecture",
       "name": "Thesis + outline (article logical structure)",
-      "sources": ["src/agents/architect.md"],
+      "sources": [
+        "src/agents/architect.md"
+      ],
       "status": "partial",
       "subfeatures": [
-        {"id": "thesis-options", "name": "Mode A: 2-3 falsifiable thesis options", "status": "ok"},
-        {"id": "outline", "name": "Mode B: structured outline + word/paragraph sizing", "status": "partial", "issue": "Sections exceeding thresholds.json writerUnit.maxWords are now decomposed into a units[] array of writer-unit subsections sized within writerUnit.minWords-maxWords (target writerUnit.targetWords), adjacent tiny units merged; decomposition is prompt-enforced (markdown agent instructions), not code-enforced"},
-        {"id": "evidence-ownership", "name": "Writes evidence-ownership.json (dedup owner map)", "status": "ok"},
-        {"id": "chronological-ordering", "name": "Surfaces chronological vs thematic ordering", "status": "ok"},
-        {"id": "argument-graph", "name": "Explicit premise→support→thesis-link logical model", "status": "ok", "issue": "Every section and writer unit now carries an argument-graph node (id, claim, evidence[], depends_on[], thesis_link, argument_role nested as a field); validated up front by write/SKILL.md Step 5.5 (orphan/cycle/empty-evidence/topological-order checks) before section-writers are spawned, not just post-hoc in self-review"},
-        {"id": "ownership-only-mode", "name": "Mode C: ownership-only from user draft", "status": "ok"}
+        {
+          "id": "thesis-options",
+          "name": "Mode A: 2-3 falsifiable thesis options",
+          "status": "ok"
+        },
+        {
+          "id": "outline",
+          "name": "Mode B: structured outline + word/paragraph sizing",
+          "status": "partial",
+          "issue": "Sections exceeding thresholds.json writerUnit.maxWords are now decomposed into a units[] array of writer-unit subsections sized within writerUnit.minWords-maxWords (target writerUnit.targetWords), adjacent tiny units merged; decomposition is prompt-enforced (markdown agent instructions), not code-enforced"
+        },
+        {
+          "id": "evidence-ownership",
+          "name": "Writes evidence-ownership.json (dedup owner map)",
+          "status": "ok"
+        },
+        {
+          "id": "chronological-ordering",
+          "name": "Surfaces chronological vs thematic ordering",
+          "status": "ok"
+        },
+        {
+          "id": "argument-graph",
+          "name": "Explicit premise→support→thesis-link logical model",
+          "status": "ok",
+          "issue": "Every section and writer unit now carries an argument-graph node (id, claim, evidence[], depends_on[], thesis_link, argument_role nested as a field); validated up front by write/SKILL.md Step 5.5 (orphan/cycle/empty-evidence/topological-order checks) before section-writers are spawned, not just post-hoc in self-review"
+        },
+        {
+          "id": "ownership-only-mode",
+          "name": "Mode C: ownership-only from user draft",
+          "status": "ok"
+        }
       ]
     },
     {
       "id": "section-writing",
       "name": "Section writing pipeline",
-      "sources": ["src/skills/write/SKILL.md", "src/agents/section-writer.md", "src/skills/write/references/style-fingerprint-rubric.md"],
+      "sources": [
+        "src/skills/write/SKILL.md",
+        "src/agents/section-writer.md",
+        "src/skills/write/references/style-fingerprint-rubric.md"
+      ],
       "status": "ok",
       "subfeatures": [
-        {"id": "parallel-spawn", "name": "One section-writer subagent per writer unit (parallel)", "status": "ok"},
-        {"id": "gemini-write", "name": "Gemini gemini_write_section primary path (Skills 1-7)", "status": "ok", "issue": "section_brief contract fixed: WriteSectionInput now accepts either the structured object (title/description/argument_role/paragraph_count/is_intro/is_conclusion/intro_or_conclusion_rules/paragraph_word_ceiling) documented in section-writer.md or a legacy plain string; self_review_scores keys renamed to style_fingerprint/academic_language to match the agent's documented return shape. Verified by tests/e2e/write-section-schema-contract.mjs (8/8 assertions pass)."},
-        {"id": "fallback-8skill", "name": "Claude in-context 8-skill fallback pipeline", "status": "partial", "issue": "Duplicates all Skills 1-7; heavy maintenance surface"},
-        {"id": "style-compliance", "name": "Skill 2: style fingerprint compliance (10-dim rubric)", "status": "ok", "issue": "extract-style-metrics.py now produces computationalMetrics.*; rubric also now reads frequentTerms for personal-lexicon preference"},
-        {"id": "hebrew-grammar", "name": "Skill 3: Hebrew grammar/register", "status": "ok"},
-        {"id": "academic-language", "name": "Skill 4: linking-word variety", "status": "ok", "issue": "Now also draws on the positive academic-terminology-{en,he}.md references (hedging verbs, argumentation connectives, citation-introduction verbs, transitions)"},
-        {"id": "language-purity", "name": "Skill 5: foreign-term purge", "status": "ok"},
-        {"id": "anti-ai-content", "name": "Skill 6 Tier 2: 5-dimension anti-AI scoring", "status": "ok"},
-        {"id": "typography-scrub", "name": "Skill 6 Tier 1: detect-ai-typography.py (em-dash/quote/RTL punctuation)", "status": "ok", "issue": "src/scripts/detect-ai-typography.py now exists and is invoked by section-writer.md Step B / Skill 6 Tier 1"},
-        {"id": "repetition", "name": "Skill 7: cross-paragraph/section repetition", "status": "ok"},
-        {"id": "source-quarantine", "name": "Untrusted source-text delimiter quarantine", "status": "ok"},
-        {"id": "claims-registry", "name": "fcntl-locked claims registry append", "status": "ok"}
+        {
+          "id": "parallel-spawn",
+          "name": "One section-writer subagent per writer unit (parallel)",
+          "status": "ok"
+        },
+        {
+          "id": "gemini-write",
+          "name": "Gemini gemini_write_section primary path (Skills 1-7)",
+          "status": "ok",
+          "issue": "section_brief contract fixed: WriteSectionInput now accepts either the structured object (title/description/argument_role/paragraph_count/is_intro/is_conclusion/intro_or_conclusion_rules/paragraph_word_ceiling) documented in section-writer.md or a legacy plain string; self_review_scores keys renamed to style_fingerprint/academic_language to match the agent's documented return shape. Verified by tests/e2e/write-section-schema-contract.mjs (8/8 assertions pass)."
+        },
+        {
+          "id": "fallback-8skill",
+          "name": "Claude in-context 8-skill fallback pipeline",
+          "status": "partial",
+          "issue": "Duplicates all Skills 1-7; heavy maintenance surface"
+        },
+        {
+          "id": "style-compliance",
+          "name": "Skill 2: style fingerprint compliance (10-dim rubric)",
+          "status": "ok",
+          "issue": "extract-style-metrics.py now produces computationalMetrics.*; rubric also now reads frequentTerms for personal-lexicon preference"
+        },
+        {
+          "id": "hebrew-grammar",
+          "name": "Skill 3: Hebrew grammar/register",
+          "status": "ok"
+        },
+        {
+          "id": "academic-language",
+          "name": "Skill 4: linking-word variety",
+          "status": "ok",
+          "issue": "Now also draws on the positive academic-terminology-{en,he}.md references (hedging verbs, argumentation connectives, citation-introduction verbs, transitions)"
+        },
+        {
+          "id": "language-purity",
+          "name": "Skill 5: foreign-term purge",
+          "status": "ok"
+        },
+        {
+          "id": "anti-ai-content",
+          "name": "Skill 6 Tier 2: 5-dimension anti-AI scoring",
+          "status": "ok"
+        },
+        {
+          "id": "typography-scrub",
+          "name": "Skill 6 Tier 1: detect-ai-typography.py (em-dash/quote/RTL punctuation)",
+          "status": "ok",
+          "issue": "src/scripts/detect-ai-typography.py now exists and is invoked by section-writer.md Step B / Skill 6 Tier 1"
+        },
+        {
+          "id": "repetition",
+          "name": "Skill 7: cross-paragraph/section repetition",
+          "status": "ok"
+        },
+        {
+          "id": "source-quarantine",
+          "name": "Untrusted source-text delimiter quarantine",
+          "status": "ok"
+        },
+        {
+          "id": "claims-registry",
+          "name": "fcntl-locked claims registry append",
+          "status": "ok"
+        }
       ]
     },
     {
       "id": "citation-audit",
       "name": "Citation hard gate",
-      "sources": ["src/agents/auditor.md"],
+      "sources": [
+        "src/agents/auditor.md"
+      ],
       "status": "ok",
       "subfeatures": [
-        {"id": "per-paragraph-audit", "name": "Auditor VERDICT PASS/FAIL/PARTIAL per paragraph", "status": "ok"},
-        {"id": "sources-json-verify", "name": "Verify metadata against sources.json only", "status": "ok"},
-        {"id": "rewrite-cycles", "name": "Max rewrite cycles then [NEEDS REVIEW]", "status": "ok"}
+        {
+          "id": "per-paragraph-audit",
+          "name": "Auditor VERDICT PASS/FAIL/PARTIAL per paragraph",
+          "status": "ok"
+        },
+        {
+          "id": "sources-json-verify",
+          "name": "Verify metadata against sources.json only",
+          "status": "ok"
+        },
+        {
+          "id": "rewrite-cycles",
+          "name": "Max rewrite cycles then [NEEDS REVIEW]",
+          "status": "ok"
+        }
       ]
     },
     {
       "id": "synthesis",
       "name": "Post-section synthesis + review",
-      "sources": ["src/agents/synthesizer.md", "src/skills/review/SKILL.md", "src/skills/review/references/scorecard.json"],
+      "sources": [
+        "src/agents/synthesizer.md",
+        "src/skills/review/SKILL.md",
+        "src/skills/review/references/scorecard.json"
+      ],
       "status": "partial",
       "subfeatures": [
-        {"id": "coherence", "name": "Cross-section and unit-to-unit coherence/flow review", "status": "ok", "issue": "synthesizer.md now checks Argument Graph Fidelity — that delivered prose actually advances each unit/section's declared claim, that depends_on dependencies are built upon in the text (not just declared in the outline), and that the thesis_link chain genuinely reaches the thesis in the final prose; also checks subsection-to-subsection (unit-to-unit) transitions within a section, not only section-to-section"},
-        {"id": "full-repetition", "name": "Full-article repetition sweep", "status": "ok"},
-        {"id": "abstract", "name": "Abstract (single or dual-language)", "status": "ok"},
-        {"id": "self-review-scorecard", "name": "6-dimension self-review gate (40/60)", "status": "ok"}
+        {
+          "id": "coherence",
+          "name": "Cross-section and unit-to-unit coherence/flow review",
+          "status": "ok",
+          "issue": "synthesizer.md now checks Argument Graph Fidelity — that delivered prose actually advances each unit/section's declared claim, that depends_on dependencies are built upon in the text (not just declared in the outline), and that the thesis_link chain genuinely reaches the thesis in the final prose; also checks subsection-to-subsection (unit-to-unit) transitions within a section, not only section-to-section"
+        },
+        {
+          "id": "full-repetition",
+          "name": "Full-article repetition sweep",
+          "status": "ok"
+        },
+        {
+          "id": "abstract",
+          "name": "Abstract (single or dual-language)",
+          "status": "ok"
+        },
+        {
+          "id": "self-review-scorecard",
+          "name": "6-dimension self-review gate (40/60)",
+          "status": "ok"
+        }
       ]
     },
     {
       "id": "anti-ai-references",
       "name": "Anti-AI pattern references (EN + HE)",
-      "sources": ["src/skills/write/references/anti-ai-patterns-hebrew.md", "src/skills/write/references/anti-ai-patterns-english.md", "src/skills/write/references/academic-terminology-hebrew.md", "src/skills/write/references/academic-terminology-english.md"],
+      "sources": [
+        "src/skills/write/references/anti-ai-patterns-hebrew.md",
+        "src/skills/write/references/anti-ai-patterns-english.md",
+        "src/skills/write/references/academic-terminology-hebrew.md",
+        "src/skills/write/references/academic-terminology-english.md"
+      ],
       "status": "ok",
       "subfeatures": [
-        {"id": "he-patterns", "name": "Hebrew pattern list A-K (openers, meta-summary, dramatic, citation format)", "status": "ok"},
-        {"id": "en-patterns", "name": "English pattern list A-G", "status": "ok"},
-        {"id": "typography-tier1", "name": "Typography auto-fix (referenced by both)", "status": "ok", "issue": "detect-ai-typography.py now exists"},
-        {"id": "academic-terminology", "name": "Positive discipline-standard terminology lexicon (EN+HE)", "status": "ok", "issue": "Added src/skills/write/references/academic-terminology-{english,hebrew}.md (~90 entries each: hedging verbs, argumentation connectives, citation-introduction verbs, section transitions, colloquial→academic substitution tables). Wired into section-writer.md, the Gemini write-section prompt/bundle (positiveTerminology), review/SKILL.md's Academic Conventions dimension, and proofread's idea-flag triggers."}
+        {
+          "id": "he-patterns",
+          "name": "Hebrew pattern list A-K (openers, meta-summary, dramatic, citation format)",
+          "status": "ok"
+        },
+        {
+          "id": "en-patterns",
+          "name": "English pattern list A-G",
+          "status": "ok"
+        },
+        {
+          "id": "typography-tier1",
+          "name": "Typography auto-fix (referenced by both)",
+          "status": "ok",
+          "issue": "detect-ai-typography.py now exists"
+        },
+        {
+          "id": "academic-terminology",
+          "name": "Positive discipline-standard terminology lexicon (EN+HE)",
+          "status": "ok",
+          "issue": "Added src/skills/write/references/academic-terminology-{english,hebrew}.md (~90 entries each: hedging verbs, argumentation connectives, citation-introduction verbs, section transitions, colloquial→academic substitution tables). Wired into section-writer.md, the Gemini write-section prompt/bundle (positiveTerminology), review/SKILL.md's Academic Conventions dimension, and proofread's idea-flag triggers."
+        }
       ]
     },
     {
       "id": "output",
       "name": "Document output",
-      "sources": ["src/scripts/generate-docx.py", "src/scripts/lib/", "docs/citation-styles-guide.md"],
+      "sources": [
+        "src/scripts/generate-docx.py",
+        "src/scripts/lib/",
+        "docs/citation-styles-guide.md"
+      ],
       "status": "ok",
       "subfeatures": [
-        {"id": "markdown-out", "name": "Markdown article output", "status": "ok"},
-        {"id": "docx-out", "name": "RTL-aware DOCX with native footnotes", "status": "ok"},
-        {"id": "citation-formats", "name": "inline-parenthetical / chicago / mla / apa", "status": "partial", "issue": "Gemini prompt inline-parenthetical example uses (Author Year, page), contradicting Hebrew (name, עמ' N) no-year rule"}
+        {
+          "id": "markdown-out",
+          "name": "Markdown article output",
+          "status": "ok"
+        },
+        {
+          "id": "docx-out",
+          "name": "RTL-aware DOCX with native footnotes",
+          "status": "ok"
+        },
+        {
+          "id": "citation-formats",
+          "name": "inline-parenthetical / chicago / mla / apa",
+          "status": "partial",
+          "issue": "Gemini prompt inline-parenthetical example uses (Author Year, page), contradicting Hebrew (name, עמ' N) no-year rule"
+        }
       ]
     },
     {
       "id": "gemini-mcp",
       "name": "Bundled Gemini MCP server",
-      "sources": ["plugins/academic-writer/mcp/gemini-server/", "scripts/build-mcp.sh", "src/thresholds.json"],
+      "sources": [
+        "plugins/academic-writer/mcp/gemini-server/",
+        "scripts/build-mcp.sh",
+        "src/thresholds.json"
+      ],
       "status": "partial",
       "subfeatures": [
-        {"id": "write-section-tool", "name": "gemini_write_section", "status": "ok", "issue": "Contract fixed to match section-writer.md — see section-writing.gemini-write for detail"},
-        {"id": "synthesize-tool", "name": "gemini_synthesize", "status": "partial"},
-        {"id": "edit-tool", "name": "gemini_edit", "status": "partial"},
-        {"id": "calibrate-tool", "name": "gemini_calibrate_sample", "status": "ok"},
-        {"id": "raw-tool", "name": "gemini_raw", "status": "ok"},
-        {"id": "calibration-bundle", "name": "Cached voice+fingerprint+words+antiAi+rubric+positiveTerminology bundle", "status": "ok", "issue": "bundle.ts now also loads the language-appropriate academic-terminology-*.md via loadPositiveTerminology(), mirroring the existing loadAntiAi() pattern, and renders it under a POSITIVE ACADEMIC TERMINOLOGY section"},
-        {"id": "error-fallback", "name": "Structured error → Claude fallback", "status": "ok"}
+        {
+          "id": "write-section-tool",
+          "name": "gemini_write_section",
+          "status": "ok",
+          "issue": "Contract fixed to match section-writer.md — see section-writing.gemini-write for detail"
+        },
+        {
+          "id": "synthesize-tool",
+          "name": "gemini_synthesize",
+          "status": "partial"
+        },
+        {
+          "id": "edit-tool",
+          "name": "gemini_edit",
+          "status": "partial"
+        },
+        {
+          "id": "calibrate-tool",
+          "name": "gemini_calibrate_sample",
+          "status": "ok"
+        },
+        {
+          "id": "raw-tool",
+          "name": "gemini_raw",
+          "status": "ok"
+        },
+        {
+          "id": "calibration-bundle",
+          "name": "Cached voice+fingerprint+words+antiAi+rubric+positiveTerminology bundle",
+          "status": "ok",
+          "issue": "bundle.ts now also loads the language-appropriate academic-terminology-*.md via loadPositiveTerminology(), mirroring the existing loadAntiAi() pattern, and renders it under a POSITIVE ACADEMIC TERMINOLOGY section"
+        },
+        {
+          "id": "error-fallback",
+          "name": "Structured error → Claude fallback",
+          "status": "ok"
+        },
+        {
+          "id": "ocr-tool",
+          "name": "gemini_ocr — single consolidated OCR tool (born-digital text-layer detect via PyMuPDF, sequential Gemini vision batches for scans, response_format concise/detailed enum, page-range + truncation_message, actionable structured errors, Sonnet-only correction left out of scope)",
+          "status": "ok",
+          "issue": "Now wired to a user-facing surface: /academic-writer:ocr command (src/skills/ocr/SKILL.md) resolves a file/directory path, checks the shared GOOGLE_API_KEY credential (env or .academic-helper/secrets.json, same resolution as setup/init), calls gemini_ocr sequentially per document/page batch (following truncation), and writes ocr-output/<name>.ocr.md. The 20MB Files API path is still not implemented server-side (see gemini-client-ocr-helpers.ts uploadViaFilesApi TODO) — the skill retries once at single-page granularity and otherwise reports the limit honestly rather than silently working around it."
+        },
+        {
+          "id": "credential-resolution",
+          "name": "Gemini API key resolution — userConfig (preferred, sensitive-stored) > GOOGLE_API_KEY env > .academic-helper/secrets.json (both casings)",
+          "status": "ok",
+          "issue": "Migrated the plugin's Gemini credential onto Claude Code's userConfig mechanism (manifests/academic-writer.json declares google_api_key, sensitive: true; substituted as USER_CONFIG_GOOGLE_API_KEY in mcpServers.gemini-api.env via ${user_config.google_api_key}). gemini-client.ts's resolveApiKey() checks it first, then falls back to the pre-existing GOOGLE_API_KEY env var, then .academic-helper/secrets.json (GOOGLE_API_KEY or lowercase google_api_key) — all three paths remain fully functional, userConfig is additive/preferred, not a replacement. Investigated whether the 'channels' MCP pattern applied here first (it doesn't — channels is for a server pushing messages into a session, not credential config; userConfig is the actual mechanism, per the Claude Code docs mirror's Plugin manifest reference). scripts/build-plugins.sh now passes userConfig through into the generated plugin.json. Covered by tests/gemini-client-key-resolution.test.ts (9 tests: every precedence pairing plus blank/whitespace optional-field fallthrough)."
+        }
       ]
     },
     {
       "id": "editing",
       "name": "Editing / revision",
-      "sources": ["src/skills/edit/SKILL.md", "src/skills/edit-section/SKILL.md", "src/skills/proofread/SKILL.md", "src/agents/proofreader.md", "src/skills/update-field/SKILL.md", "src/skills/update-tools/SKILL.md"],
+      "sources": [
+        "src/skills/edit/SKILL.md",
+        "src/skills/edit-section/SKILL.md",
+        "src/skills/proofread/SKILL.md",
+        "src/agents/proofreader.md",
+        "src/skills/update-field/SKILL.md",
+        "src/skills/update-tools/SKILL.md"
+      ],
       "status": "ok",
       "subfeatures": [
-        {"id": "edit-article", "name": "Revise a drafted article", "status": "ok"},
-        {"id": "edit-section", "name": "Revise one section", "status": "ok"},
-        {"id": "proofread", "name": "Mechanical הגהה change-report pass", "status": "ok"},
-        {"id": "update-field", "name": "Update a profile field", "status": "ok"},
-        {"id": "update-tools", "name": "Change integrations", "status": "ok"}
+        {
+          "id": "edit-article",
+          "name": "Revise a drafted article",
+          "status": "ok"
+        },
+        {
+          "id": "edit-section",
+          "name": "Revise one section",
+          "status": "ok"
+        },
+        {
+          "id": "proofread",
+          "name": "Mechanical הגהה change-report pass",
+          "status": "ok"
+        },
+        {
+          "id": "update-field",
+          "name": "Update a profile field",
+          "status": "ok"
+        },
+        {
+          "id": "update-tools",
+          "name": "Change integrations",
+          "status": "ok"
+        }
       ]
     },
     {
       "id": "infra",
       "name": "Plugin infrastructure",
-      "sources": ["src/hooks/", "scripts/build-plugins.sh", "src/thresholds.json", "src/settings/academic-writer.settings.json", "tests/"],
+      "sources": [
+        "src/hooks/",
+        "scripts/build-plugins.sh",
+        "src/thresholds.json",
+        "src/settings/academic-writer.settings.json",
+        "tests/"
+      ],
       "status": "ok",
       "subfeatures": [
-        {"id": "lifecycle-hooks", "name": "Profile-scoped lifecycle hooks (TS/esbuild)", "status": "ok"},
-        {"id": "thresholds", "name": "thresholds.json single source of truth", "status": "ok"},
-        {"id": "build", "name": "build-plugins + build-mcp + build:hooks", "status": "ok"},
-        {"id": "tests", "name": "pytest structural + contract + voice tests", "status": "partial", "issue": "No test asserts referenced scripts exist; missing scripts pass CI"},
-        {"id": "help-health", "name": "help + health skills", "status": "ok"}
+        {
+          "id": "lifecycle-hooks",
+          "name": "Profile-scoped lifecycle hooks (TS/esbuild)",
+          "status": "ok"
+        },
+        {
+          "id": "thresholds",
+          "name": "thresholds.json single source of truth",
+          "status": "ok"
+        },
+        {
+          "id": "build",
+          "name": "build-plugins + build-mcp + build:hooks",
+          "status": "ok"
+        },
+        {
+          "id": "tests",
+          "name": "pytest structural + contract + voice tests",
+          "status": "partial",
+          "issue": "No test asserts referenced scripts exist; missing scripts pass CI"
+        },
+        {
+          "id": "help-health",
+          "name": "help + health skills",
+          "status": "ok"
+        }
       ]
     }
   ]

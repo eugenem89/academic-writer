@@ -430,7 +430,7 @@ class TestCrossReferences(unittest.TestCase):
         skills = [
             "DRAFT",
             "STYLE FINGERPRINT COMPLIANCE",
-            "HEBREW GRAMMAR",
+            "GRAMMAR CHECK",
             "REPETITION CHECK",
             "CITATION AUDIT",
         ]
@@ -443,7 +443,7 @@ class TestCrossReferences(unittest.TestCase):
         skills = [
             "Draft",
             "Style Compliance",
-            "Hebrew Grammar",
+            "Grammar Check",
             "Repetition Check",
             "Citation Audit",
         ]

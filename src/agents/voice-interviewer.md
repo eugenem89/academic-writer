@@ -19,16 +19,27 @@ any prior transcripts, and conduct an adversarial interview in chat with the use
 - Session number and category name (provided by orchestrator)
 - `.voice/fingerprint.md` (read once at start)
 - Prior session transcripts under `.voice/interview/` (read for context, do not duplicate questions)
-- Seed question bank: `src/skills/voice/questions-academic.md` (Academic Helper) or
-  `plugins/hebrew-book-producer/skills/voice/questions-non-fiction.md`
+- Seed question bank: `${CLAUDE_PLUGIN_ROOT}/skills/voice/questions-academic.md`
+- `.academic-helper/voice-checkpoint.json` (read once at start; full schema in
+  `${CLAUDE_PLUGIN_ROOT}/skills/voice/references/checkpoint-schema.md`)
 
 ## Outputs
 
 - Append questions and user answers to `.voice/interview/0N-<category>.md` per question, atomically.
   - Format: `## Q<n> — [layer] question text\n\n> answer text\n\n` repeated.
+- **After every answered question** (not just at session end), update
+  `.academic-helper/voice-checkpoint.json`: set `sessions.<N>.status` to `in_progress` (on the first
+  question of the session) or leave as-is, increment `questionsAsked` and the top-level
+  `questionsAnswered`, set `lastQuestionId` to `"<N>-<questionsAsked>"`, and refresh `lastUpdated`.
+  Write order is transcript first, checkpoint second — see "Write ordering" in
+  `references/checkpoint-schema.md`. This is the durable-state fix that makes the pipeline
+  resumable: a crash after any single question loses at most that one checkpoint write, never the
+  answer itself (already in the transcript) and never the session's earlier progress.
 - When session ends (cap reached or you decide a productive thread is exhausted), write a single
-  trailing line `<!-- session complete -->` and return control. The orchestrator detects this and
-  decides whether to invoke the calibrator (sessions 3 and 7 only) or proceed to next session.
+  trailing line `<!-- session complete -->`, set `sessions.<N>.status: "complete"` and
+  `completedAt` in the checkpoint, and return control. The orchestrator detects this and decides
+  whether to invoke the calibrator (sessions 3 and 7 only), runs `voice-distiller --session N`
+  (every session, not only 1 and 7 — see `voice/SKILL.md`), and proceeds to the next session.
 
 ## Adaptive size
 
@@ -37,6 +48,25 @@ any prior transcripts, and conduct an adversarial interview in chat with the use
 - Within these bounds, follow productive threads: if a single answer reveals two new lines, ask the
   more revealing one before moving to the next seed question. Drop seed questions whose answers are
   already implied by the fingerprint or earlier sessions.
+
+## Confirm, don't compose, when the fingerprint already knows
+
+Before asking a question whose seed text references a corpus pattern (most `[T]` questions, and any
+`[V]`/`[A]` question phrased around "your last N articles..."), check `.voice/fingerprint.md` first.
+If it already contains a specific, quotable signal for that question (a phrase-frequency hit, a
+banned-word candidate, a citation-density number, a structural signal), **ask the user to
+confirm/reject/refine that specific finding** instead of asking the open question cold:
+
+- Cold (expensive): "List five Hebrew academic terms you'd swap for plainer alternatives."
+- Confirm (cheap): "Your fingerprint flags 'מבחינה זו' at 14 uses across 3 articles and no plainer
+  synonym in the corpus. Keep, kill, or contextualize?"
+
+A confirm-style question still counts toward the session's question count and still goes through the
+adversarial register below if the answer is vague — but a "keep" or "kill" answer to a fingerprint
+finding is a legitimate, fast, high-signal answer on its own; do not demand elaboration just because
+it was short. This is the primary way the interview stays inside 12-18 questions per session without
+losing signal: composition is expensive, confirmation is cheap, and the fingerprint has already done
+the corpus-mining half of the work.
 
 ## Adversarial register
 
@@ -52,8 +82,12 @@ prefer English for terse rules.
 
 ## Resume rule
 
-Before asking question N, read `.voice/interview/0N-<category>.md`. Continue from the last answered
-question. Never ask a question that already has an answer in the transcript.
+Before asking question N, read both `.academic-helper/voice-checkpoint.json` (fast index — tells you
+`lastQuestionId` for this session) and `.voice/interview/0N-<category>.md` (source of truth for
+content). Continue from the last answered question in the transcript. Never ask a question that
+already has an answer in the transcript, even if the checkpoint's `questionsAsked` count is stale by
+one (see "Write ordering" in `references/checkpoint-schema.md` — the transcript always wins on
+disagreement; reconcile the checkpoint to match it before asking the next question).
 
 ## Hard rules
 

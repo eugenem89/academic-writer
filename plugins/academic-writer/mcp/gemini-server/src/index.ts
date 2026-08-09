@@ -5,12 +5,13 @@
  * calibration samples) to Gemini. Claude Code spawns this server via the
  * plugin manifest; subagents inherit access to its tools.
  *
- * Five tools:
+ * Six tools:
  *   - gemini_write_section
  *   - gemini_synthesize
  *   - gemini_edit
  *   - gemini_calibrate_sample
  *   - gemini_raw
+ *   - gemini_ocr
  *
  * Auth, retry, calibration-bundle caching, and thinking-API split are handled
  * inside the bundled modules; the server itself is a thin adapter.
@@ -24,6 +25,7 @@ import { runSynthesize, SynthesizeInput } from './tools/synthesize.js';
 import { runEdit, EditInput } from './tools/edit.js';
 import { runCalibrateSample, CalibrateSampleInput } from './tools/calibrate_sample.js';
 import { runRaw, RawInput } from './tools/raw.js';
+import { runGeminiOcr, GeminiOcrInput } from './tools/gemini_ocr.js';
 import { isStructuredError } from './bundle.js';
 import { resolveApiKey } from './gemini-client.js';
 import { noCredentials, toToolResult, type StructuredError } from './errors.js';
@@ -44,22 +46,49 @@ function wrap<T>(
   return async (input: unknown) => {
     const key = await resolveApiKey();
     if (!key) return toToolResult(noCredentials());
-    try {
-      const result = await run(input);
-      return {
-        content: [
-          { type: 'text', text: JSON.stringify(result) },
-        ],
-      };
-    } catch (err) {
-      if (isStructuredError(err)) return toToolResult(err);
-      const fallback: StructuredError = {
-        code: 'api_error',
-        message: err instanceof Error ? err.message : String(err),
-      };
-      return toToolResult(fallback);
-    }
+    return runAndCatch(run, input);
   };
+}
+
+/**
+ * Like `wrap`, but skips the unconditional upfront `resolveApiKey()` gate.
+ *
+ * gemini_ocr's born-digital path (PyMuPDF text extraction only) never calls
+ * Gemini and so never needs a key; requiring one unconditionally here would
+ * reject a valid no-key request before it even runs. The deferred check
+ * still happens — `runGeminiOcr`'s scanned-page path calls
+ * `deps.generate` (`defaultGenerate` in gemini_ocr_deps.ts), which resolves
+ * the Gemini client via `getClient()`/`resolveApiKey()` and throws the same
+ * `no_credentials` StructuredError at the point a key actually turns out to
+ * be needed. Reserved for gemini_ocr only — every other tool keeps the
+ * unconditional `wrap()` gate above.
+ */
+function wrapDeferredCredentials<T>(
+  run: (input: unknown) => Promise<T>,
+): (input: unknown) => Promise<{
+  content: Array<{ type: 'text'; text: string }>;
+  isError?: boolean;
+}> {
+  return async (input: unknown) => runAndCatch(run, input);
+}
+
+async function runAndCatch<T>(
+  run: (input: unknown) => Promise<T>,
+  input: unknown,
+): Promise<{ content: Array<{ type: 'text'; text: string }>; isError?: boolean }> {
+  try {
+    const result = await run(input);
+    return {
+      content: [{ type: 'text', text: JSON.stringify(result) }],
+    };
+  } catch (err) {
+    if (isStructuredError(err)) return toToolResult(err);
+    const fallback: StructuredError = {
+      code: 'api_error',
+      message: err instanceof Error ? err.message : String(err),
+    };
+    return toToolResult(fallback);
+  }
 }
 
 async function main(): Promise<void> {
@@ -116,6 +145,24 @@ async function main(): Promise<void> {
       inputSchema: RawInput.shape,
     },
     wrap(runRaw),
+  );
+
+  server.registerTool(
+    'gemini_ocr',
+    {
+      description:
+        'OCR a PDF or image via Gemini 2.5 Flash vision, with a PyMuPDF pre-pass that skips ' +
+        'Gemini entirely for born-digital pages (extracts text directly). Scanned pages are ' +
+        'rasterized and OCR\'d in small sequential batches (never parallel — a parallel run ' +
+        'previously corrupted output). Returns per-page text plus is_born_digital and ' +
+        'confidence/notes flags. OCR ONLY: this tool never re-runs output through another ' +
+        'model to "fix" garbled text (Hebrew OCR correction is a downstream, Sonnet-only ' +
+        'concern) — if a page looks unreliable it is flagged via confidence/notes, not ' +
+        'silently rewritten. Truncates and reports a continuation point for very large ' +
+        'page_range requests; call again with the indicated starting page.',
+      inputSchema: GeminiOcrInput.shape,
+    },
+    wrapDeferredCredentials(runGeminiOcr),
   );
 
   const transport = new StdioServerTransport();
