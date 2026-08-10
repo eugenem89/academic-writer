@@ -62,10 +62,16 @@ export function assertOcrModelAllowed(model: string): void {
 export interface InlineImagePart {
   inlineData: { mimeType: string; data: string };
 }
+/** Files-API-referenced image part — used instead of InlineImagePart once a
+ * page's image has been uploaded via uploadViaFilesApi() below. */
+export interface FileDataImagePart {
+  fileData: { mimeType: string; fileUri: string };
+}
+export type ImagePart = InlineImagePart | FileDataImagePart;
 export interface TextPart {
   text: string;
 }
-export type ContentPart = InlineImagePart | TextPart;
+export type ContentPart = ImagePart | TextPart;
 
 /**
  * Per C6: for vision OCR calls, IMAGE parts must precede the TEXT/prompt
@@ -75,8 +81,11 @@ export type ContentPart = InlineImagePart | TextPart;
  * more reliable when the model sees the visual evidence before being told
  * what to do with it, which matters for OCR specifically (vs. e.g. a
  * text-editing task where the instruction naturally comes first).
+ *
+ * Accepts either inline (base64) or Files-API (fileUri) image parts —
+ * ordering is the only constraint this function enforces, not payload shape.
  */
-export function buildOcrParts(images: InlineImagePart[], promptText: string): ContentPart[] {
+export function buildOcrParts(images: ImagePart[], promptText: string): ContentPart[] {
   return [...images, { text: promptText }];
 }
 
@@ -118,25 +127,144 @@ export function decideUploadPath(rawImageByteSizes: number[]): PayloadDecision {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Files API upload + poll-until-ACTIVE
+// ---------------------------------------------------------------------------
+
 /**
- * TODO (staging pass, NOT wired): actual Files API upload.
- *
- * The real @google/genai SDK exposes `client.files.upload({file, config})`
- * returning a file handle you reference in `contents` as a `fileData` part
- * instead of `inlineData`. We do not call it here — this staging pass only
- * implements the DECISION (decideUploadPath above) for real. If a batch's
- * estimated payload exceeds INLINE_SIZE_LIMIT_BYTES, gemini_ocr.ts must call
- * this function, which currently always throws a structured error telling
- * the caller to reduce batch size / rasterization DPI as a workaround, since
- * there is no working upload path yet.
+ * Poll interval while an uploaded file's state is PROCESSING. 2s balances
+ * responsiveness against not hammering the Files API `get` endpoint;
+ * comfortably inside the 1-3s range the task called out as reasonable.
  */
-export async function uploadViaFilesApi(): Promise<never> {
-  throw ocrFailed(
-    'This batch\'s images exceed the 20MB inline payload limit and the Files API upload ' +
-      'path is not yet implemented in this build. Work around it by lowering rasterization ' +
-      'DPI or requesting fewer pages per call (page_range) so the batch fits under 20MB inline.',
-    { limit_bytes: INLINE_SIZE_LIMIT_BYTES },
-  ) as unknown as never;
+export const FILES_API_POLL_INTERVAL_MS = 2000;
+
+/**
+ * Total time budget for a single upload to leave PROCESSING and reach
+ * ACTIVE. 2 minutes: generous headroom over typical large-PDF-page-image
+ * processing times (usually seconds) while still failing fast (well under
+ * a Claude Code tool-call timeout) instead of hanging indefinitely if the
+ * Files API stalls.
+ */
+export const FILES_API_POLL_TIMEOUT_MS = 120_000;
+
+export interface UploadedFileRef {
+  /** Resource id (e.g. "files/abc123") — pass to get()/delete(). */
+  name: string;
+  /** URI to reference in a generateContent `fileData` part. */
+  uri: string;
+  mimeType: string;
+}
+
+/** Minimal shape of a Files API file handle, normalized from the SDK's
+ * `types.File` (see gemini-client.ts's GeminiFileHandle / normalizeFileHandle). */
+export interface FilesApiFileHandle {
+  name: string;
+  uri: string;
+  mimeType: string;
+  state: string;
+  errorMessage?: string;
+}
+
+/** Injected Files API surface — lets callers (and tests) swap in a fake
+ * without touching the real @google/genai client. Backed in production by
+ * gemini-client.ts's uploadFileToFilesApi()/getFilesApiFile(). */
+export interface FilesApiUploader {
+  upload: (filePath: string, mimeType: string) => Promise<FilesApiFileHandle>;
+  getStatus: (name: string) => Promise<FilesApiFileHandle>;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Rethrows an already-structured error (has a `code` field, e.g.
+ * `no_credentials` from getClient(), or `api_error`/`transient` from
+ * gemini-client.ts's Files API wrappers) unchanged; wraps anything else as
+ * an actionable `ocr_failed` mentioning "Files API" so the `/academic-writer:ocr`
+ * skill's per-page-split fallback still recognizes and triggers on it. */
+function wrapFilesApiError(err: unknown, filePath: string, verb: string): Error {
+  if (err && typeof err === 'object' && 'code' in err) return err as unknown as Error;
+  const message = err instanceof Error ? err.message : String(err);
+  return ocrFailed(
+    `Gemini Files API ${verb} failed for "${filePath}": ${message}. Retry, or fall back to ` +
+      'per-page OCR (page_range narrowed to one page at a time).',
+    { file: filePath },
+  ) as unknown as Error;
+}
+
+/**
+ * Upload a local file to the Gemini Files API and poll until it reaches
+ * ACTIVE, for use when a batch's estimated inline payload exceeds
+ * INLINE_SIZE_LIMIT_BYTES (see decideUploadPath above). Returns the file's
+ * URI (+ mimeType) for use in a `fileData` content part in a subsequent
+ * generateContent call — see buildOcrParts().
+ *
+ * PROCESSING is polled at FILES_API_POLL_INTERVAL_MS until either ACTIVE
+ * (success), FAILED (throws an actionable ocr_failed error), or
+ * FILES_API_POLL_TIMEOUT_MS elapses (throws an actionable timeout error).
+ * Never proceeds silently past a non-ACTIVE terminal state.
+ *
+ * Caller (gemini_ocr.ts) is responsible for deleting the uploaded file after
+ * use (success or failure) via the SDK's delete method — this function does
+ * not delete, since the caller needs the file to still exist for the
+ * subsequent generateContent call.
+ */
+export async function uploadViaFilesApi(
+  filePath: string,
+  mimeType: string,
+  filesApi: FilesApiUploader,
+  opts: { pollIntervalMs?: number; timeoutMs?: number } = {},
+): Promise<UploadedFileRef> {
+  const pollIntervalMs = opts.pollIntervalMs ?? FILES_API_POLL_INTERVAL_MS;
+  const timeoutMs = opts.timeoutMs ?? FILES_API_POLL_TIMEOUT_MS;
+
+  let handle: FilesApiFileHandle;
+  try {
+    handle = await filesApi.upload(filePath, mimeType);
+  } catch (err) {
+    throw wrapFilesApiError(err, filePath, 'upload');
+  }
+
+  const deadline = Date.now() + timeoutMs;
+  while (handle.state === 'PROCESSING') {
+    if (Date.now() >= deadline) {
+      throw ocrFailed(
+        `Gemini Files API upload of "${filePath}" was still PROCESSING after ` +
+          `${Math.round(timeoutMs / 1000)}s and did not reach ACTIVE in time. The file may be ` +
+          'unusually large or the service may be degraded — retry, or fall back to per-page ' +
+          'OCR (page_range narrowed to one page at a time).',
+        { file: filePath, name: handle.name, timeout_ms: timeoutMs },
+      ) as unknown as Error;
+    }
+    // eslint-disable-next-line no-await-in-loop -- polling is inherently sequential
+    await sleep(pollIntervalMs);
+    try {
+      // eslint-disable-next-line no-await-in-loop -- polling is inherently sequential
+      handle = await filesApi.getStatus(handle.name);
+    } catch (err) {
+      throw wrapFilesApiError(err, filePath, 'status check');
+    }
+  }
+
+  if (handle.state === 'FAILED') {
+    throw ocrFailed(
+      `Gemini Files API failed to process the uploaded file "${filePath}"` +
+        `${handle.errorMessage ? `: ${handle.errorMessage}` : '.'} Retry, or fall back to ` +
+        'per-page OCR (page_range narrowed to one page at a time).',
+      { file: filePath, name: handle.name },
+    ) as unknown as Error;
+  }
+
+  if (handle.state !== 'ACTIVE') {
+    throw ocrFailed(
+      `Gemini Files API returned an unexpected state "${handle.state}" for uploaded file ` +
+        `"${filePath}". Retry, or fall back to per-page OCR (page_range narrowed to one page ` +
+        'at a time).',
+      { file: filePath, name: handle.name, state: handle.state },
+    ) as unknown as Error;
+  }
+
+  return { name: handle.name, uri: handle.uri, mimeType: handle.mimeType || mimeType };
 }
 
 // ---------------------------------------------------------------------------

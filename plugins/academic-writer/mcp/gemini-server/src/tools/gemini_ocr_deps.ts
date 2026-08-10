@@ -13,8 +13,18 @@ import { readFile, rm, stat } from 'node:fs/promises';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ocrFailed } from '../errors.js';
-import { generate as geminiGenerate } from '../gemini-client.js';
-import { OCR_MODEL, OCR_THINKING_BUDGET, buildOcrParts } from '../gemini-client-ocr-helpers.js';
+import {
+  generate as geminiGenerate,
+  uploadFileToFilesApi,
+  getFilesApiFile,
+  deleteFilesApiFile,
+} from '../gemini-client.js';
+import {
+  OCR_MODEL,
+  OCR_THINKING_BUDGET,
+  buildOcrParts,
+  type ImagePart,
+} from '../gemini-client-ocr-helpers.js';
 import {
   GEMINI_OCR_RESPONSE_SCHEMA,
   type DetectResult,
@@ -86,9 +96,11 @@ async function runPythonJson(scriptName: string, args: string[]): Promise<Record
  * (see index.ts's `wrapDeferredCredentials`).
  */
 async function defaultGenerate(args: OcrGenerateArgs): Promise<OcrGenerateResult> {
-  const imageParts = args.images.map((img) => ({
-    inlineData: { mimeType: img.mimeType, data: img.data },
-  }));
+  const imageParts: ImagePart[] = args.images.map((img) =>
+    img.fileUri
+      ? { fileData: { mimeType: img.mimeType, fileUri: img.fileUri } }
+      : { inlineData: { mimeType: img.mimeType, data: img.data ?? '' } },
+  );
   const parts = buildOcrParts(imageParts, args.promptText);
   const result = await geminiGenerate({
     system: '',
@@ -136,5 +148,8 @@ export function defaultDeps(): GeminiOcrDeps {
         return false;
       }
     },
+    uploadFile: uploadFileToFilesApi,
+    getUploadedFileStatus: getFilesApiFile,
+    deleteUploadedFile: deleteFilesApiFile,
   };
 }

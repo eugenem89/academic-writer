@@ -60,8 +60,17 @@ export const GEMINI_OCR_RESPONSE_SCHEMA = {
 // subprocesses swappable for unit tests (no network, no live subprocess).
 // ---------------------------------------------------------------------------
 
+/** One image for a vision call — either inline base64 `data` (small pages,
+ * sent under the 20MB threshold) or a Files-API `fileUri` reference (large
+ * pages, uploaded+polled via uploadViaFilesApi() first). Exactly one of
+ * `data`/`fileUri` is set per image. */
+export interface OcrImagePart {
+  mimeType: string;
+  data?: string;
+  fileUri?: string;
+}
 export interface OcrGenerateArgs {
-  images: Array<{ mimeType: string; data: string }>;
+  images: OcrImagePart[];
   promptText: string;
   mediaResolution: MediaResolution;
 }
@@ -70,6 +79,16 @@ export interface OcrGenerateResult {
   finishReason: string;
 }
 export type OcrGenerateFn = (args: OcrGenerateArgs) => Promise<OcrGenerateResult>;
+
+/** Files API file handle as seen by gemini_ocr's dependency-injection
+ * surface — mirrors gemini-client-ocr-helpers.ts's FilesApiFileHandle. */
+export interface OcrUploadedFileHandle {
+  name: string;
+  uri: string;
+  mimeType: string;
+  state: string;
+  errorMessage?: string;
+}
 
 export interface DetectedPage {
   page_number: number;
@@ -101,4 +120,14 @@ export interface GeminiOcrDeps {
   readFileBase64: (filePath: string) => Promise<{ data: string; rawBytes: number }>;
   cleanupDir: (dir: string) => Promise<void>;
   fileExists: (filePath: string) => Promise<boolean>;
+  /** Files API upload — invoked (per page) when a chunk's estimated inline
+   * payload exceeds INLINE_SIZE_LIMIT_BYTES. See uploadFileToFilesApi() in
+   * gemini-client.ts for the production implementation. */
+  uploadFile: (filePath: string, mimeType: string) => Promise<OcrUploadedFileHandle>;
+  /** Files API poll — invoked repeatedly while an uploaded file is
+   * PROCESSING. See getFilesApiFile() in gemini-client.ts. */
+  getUploadedFileStatus: (name: string) => Promise<OcrUploadedFileHandle>;
+  /** Files API cleanup — invoked after an OCR call that used an uploaded
+   * file, success or failure. See deleteFilesApiFile() in gemini-client.ts. */
+  deleteUploadedFile: (name: string) => Promise<void>;
 }
