@@ -43,6 +43,8 @@ import {
   decideUploadPath,
   selectMediaResolution,
   mapFinishReasonError,
+  uploadViaFilesApi,
+  type ImagePart,
 } from '../gemini-client-ocr-helpers.js';
 import {
   planBatch,
@@ -58,6 +60,7 @@ import {
   GEMINI_OCR_RESPONSE_SCHEMA,
   type GeminiOcrDeps,
   type DetectResult,
+  type OcrImagePart,
 } from './gemini_ocr_types.js';
 import { defaultDeps } from './gemini_ocr_deps.js';
 
@@ -207,24 +210,38 @@ async function ocrOneChunk(
   if (chunk.length === 0) return [];
 
   const raster = await deps.runRasterizePages(input.document_path, chunk);
+  // Files API uploads made for this chunk, tracked so they get deleted
+  // (success or failure) in the `finally` below — uploaded files persist
+  // ~48h server-side and count against the user's storage quota.
+  const uploadedFileNames: string[] = [];
   try {
-    // Read + base64-encode every page image in this chunk.
+    // Read + base64-encode every page image in this chunk (needed for the
+    // size decision regardless of which path is ultimately taken).
     const encoded = await Promise.all(raster.pages.map((p) => deps.readFileBase64(p.png_path)));
     const decision = decideUploadPath(encoded.map((e) => e.rawBytes));
+
+    let images: OcrImagePart[];
     if (decision.useFilesApi) {
-      // TODO: Files API upload not wired — see gemini-client-ocr-helpers.ts.
-      // Surfacing as an actionable structured error rather than silently
-      // falling back to a broken inline call.
-      throw ocrFailed(
-        `Pages ${chunk.join(', ')} together exceed the 20MB inline payload limit ` +
-          `(estimated ${decision.estimatedBase64Bytes} base64 bytes) and the Files API ` +
-          `upload path is not yet implemented. Lower rasterization DPI or request fewer ` +
-          `pages per call.`,
-        { pages: chunk, estimated_bytes: decision.estimatedBase64Bytes },
-      ) as unknown as Error;
+      // Chunk exceeds the inline threshold: upload each page's rasterized
+      // PNG via the Files API and poll until ACTIVE, strictly sequentially
+      // (mirrors C1 — never parallelize Gemini-facing calls). If upload/poll
+      // itself errors (network failure, FAILED state, timeout), the error
+      // propagates as an actionable ocr_failed (see uploadViaFilesApi) that
+      // the /academic-writer:ocr skill's per-page-split fallback catches.
+      images = [];
+      for (const page of raster.pages) {
+        // eslint-disable-next-line no-await-in-loop -- uploads must stay sequential (C1)
+        const ref = await uploadViaFilesApi(page.png_path, 'image/png', {
+          upload: deps.uploadFile,
+          getStatus: deps.getUploadedFileStatus,
+        });
+        uploadedFileNames.push(ref.name);
+        images.push({ mimeType: 'image/png', fileUri: ref.uri });
+      }
+    } else {
+      images = encoded.map((e) => ({ mimeType: 'image/png', data: e.data }));
     }
 
-    const images = encoded.map((e) => ({ mimeType: 'image/png', data: e.data }));
     const promptText = renderPrompt(input.target_language, input.response_format, chunk);
     const mediaResolution = selectMediaResolution(input.response_format);
 
@@ -232,13 +249,17 @@ async function ocrOneChunk(
     // this differs from write_section.ts's text-only convention. Exercised
     // here (and independently unit-tested) so the ordering rule can't
     // silently regress even though deps.generate builds its own `contents`.
-    const sdkShapedImages = images.map((img) => ({
-      inlineData: { mimeType: img.mimeType, data: img.data },
-    }));
+    // Covers both inline (data) and Files API (fileUri) image shapes.
+    const sdkShapedImages: ImagePart[] = images.map((img) =>
+      img.fileUri
+        ? { fileData: { mimeType: img.mimeType, fileUri: img.fileUri } }
+        : { inlineData: { mimeType: img.mimeType, data: img.data ?? '' } },
+    );
     const orderedParts = buildOcrParts(sdkShapedImages, promptText);
     if (
       images.length > 0 &&
-      (orderedParts.length !== images.length + 1 || !('inlineData' in orderedParts[0]))
+      (orderedParts.length !== images.length + 1 ||
+        !('inlineData' in orderedParts[0] || 'fileData' in orderedParts[0]))
     ) {
       throw ocrFailed('Internal error: OCR request parts were not image-first.');
     }
@@ -271,6 +292,15 @@ async function ocrOneChunk(
     }
     return arr.data;
   } finally {
+    // Always clean up any Files API uploads for this chunk, success or
+    // failure — a downstream failure (bad finishReason, JSON parse error,
+    // schema validation) must not leak an ACTIVE uploaded file. Best-effort:
+    // a delete failure here must not mask whatever error is already
+    // propagating (or replace a clean success with a spurious failure).
+    for (const name of uploadedFileNames) {
+      // eslint-disable-next-line no-await-in-loop -- sequential cleanup, same as everything else in this chunk
+      await deps.deleteUploadedFile(name).catch(() => {});
+    }
     // Always clean up the rasterized temp dir, success or failure — no
     // unbounded /tmp litter (the flaw this staging pass was told to avoid).
     await deps.cleanupDir(raster.temp_dir);

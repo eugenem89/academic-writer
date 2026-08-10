@@ -228,16 +228,22 @@ async function getClient(): Promise<GoogleGenAI> {
   return cachedClient;
 }
 
-/** A single part of a multimodal `contents` array — image or text. Vision
- * callers (gemini_ocr) must order image parts before the text part; see
- * gemini-client-ocr-helpers.ts's buildOcrParts(). */
+/** A single part of a multimodal `contents` array — image (inline or
+ * Files-API-referenced) or text. Vision callers (gemini_ocr) must order
+ * image parts before the text part; see gemini-client-ocr-helpers.ts's
+ * buildOcrParts(). */
 export interface InlineImageContentPart {
   inlineData: { mimeType: string; data: string };
+}
+/** Files-API-referenced image, used once a page's image has been uploaded
+ * via uploadFileToFilesApi()/uploadViaFilesApi() instead of inlined. */
+export interface FileDataContentPart {
+  fileData: { mimeType: string; fileUri: string };
 }
 export interface TextContentPart {
   text: string;
 }
-export type GenerateContentPart = InlineImageContentPart | TextContentPart;
+export type GenerateContentPart = InlineImageContentPart | FileDataContentPart | TextContentPart;
 
 export interface GenerateArgs {
   system: string;
@@ -363,6 +369,88 @@ export async function generate(args: GenerateArgs): Promise<GenerateResult> {
       throw structured as unknown as Error;
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Files API — upload/get/delete wrappers around @google/genai's `ai.files.*`
+// (see gemini-client-ocr-helpers.ts's uploadViaFilesApi() for the
+// upload+poll-until-ACTIVE orchestration that consumes these).
+// ---------------------------------------------------------------------------
+
+/** Normalized subset of the SDK's `types.File` we actually need. */
+export interface GeminiFileHandle {
+  /** Resource id (e.g. "files/abc123") — pass to get()/delete(). */
+  name: string;
+  uri: string;
+  mimeType: string;
+  state: string;
+  errorMessage?: string;
+}
+
+interface RawFilesApiFile {
+  name?: string;
+  uri?: string;
+  mimeType?: string;
+  state?: string;
+  error?: { message?: string };
+}
+
+function normalizeFileHandle(f: RawFilesApiFile): GeminiFileHandle {
+  return {
+    name: f.name ?? '',
+    uri: f.uri ?? '',
+    mimeType: f.mimeType ?? '',
+    state: f.state ?? 'STATE_UNSPECIFIED',
+    errorMessage: f.error?.message,
+  };
+}
+
+/** Runs a Files API SDK call, mapping failures the same way generate()'s
+ * retry loop does (5xx/429/network -> transient, everything else ->
+ * api_error) — except a StructuredError raised earlier in the chain (e.g.
+ * noCredentials() from getClient()) passes through unchanged. */
+async function callFilesApi<T>(op: () => Promise<T>, verb: string): Promise<T> {
+  try {
+    return await op();
+  } catch (err) {
+    if (err && typeof err === 'object' && 'code' in err) throw err as unknown as Error;
+    const status = readHttpStatus(err);
+    const code = readErrCode(err);
+    const retryable = isRetryable(status, code);
+    const message = err instanceof Error ? err.message : String(err);
+    const structured: StructuredError = retryable
+      ? transient(`Gemini Files API ${verb} failed: ${message}`, { status, code })
+      : apiError(`Gemini Files API ${verb} failed: ${message}`, { status, code });
+    throw structured as unknown as Error;
+  }
+}
+
+/** Uploads a local file to the Gemini Files API. Returns immediately with
+ * whatever state the SDK reports (often PROCESSING for larger files) — the
+ * caller (uploadViaFilesApi() in gemini-client-ocr-helpers.ts) polls
+ * getFilesApiFile() until it reaches ACTIVE. */
+export async function uploadFileToFilesApi(filePath: string, mimeType: string): Promise<GeminiFileHandle> {
+  const client = await getClient();
+  const file = await callFilesApi(
+    () => client.files.upload({ file: filePath, config: { mimeType } }),
+    'upload',
+  );
+  return normalizeFileHandle(file);
+}
+
+/** Retrieves the current state of a previously-uploaded file. */
+export async function getFilesApiFile(name: string): Promise<GeminiFileHandle> {
+  const client = await getClient();
+  const file = await callFilesApi(() => client.files.get({ name }), 'get');
+  return normalizeFileHandle(file);
+}
+
+/** Deletes a previously-uploaded file. Files persist ~48h server-side and
+ * count against the user's storage quota, so callers should always delete
+ * after use (success or failure) — see gemini_ocr.ts's cleanup try/finally. */
+export async function deleteFilesApiFile(name: string): Promise<void> {
+  const client = await getClient();
+  await callFilesApi(() => client.files.delete({ name }), 'delete');
 }
 
 interface GenAiUsage {

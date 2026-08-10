@@ -130,15 +130,20 @@ mcp__gemini-api__gemini_ocr({
 - Accumulate all `pages` arrays across calls into one ordered list (sort by `page_number` if calls
   ever returned out of order — they shouldn't, but don't assume).
 
-**On the `>20MB` inline-payload failure** (a structured `ocr_failed` error whose message mentions the
-20MB inline limit / Files API): the bundled MCP server's Files API upload path is not implemented yet
-— it cannot silently work around this. Retry **once** with the same `page_range` narrowed to a single
-page at a time (call `gemini_ocr` per individual page instead of the default 6-page-per-call batch) —
-this fixes the common case where a *batch* of pages together crossed 20MB even though no single page
-does. If a **single page alone** still fails with the same error, do not keep retrying: report to the
-user plainly that this specific page's rasterized image exceeds Gemini's 20MB inline limit and that
-large-file upload isn't supported by this build yet — skip that page, note it in the output file's
-Notes section, and continue with the rest of the document.
+**Large pages (`>20MB`) now route through the Gemini Files API automatically** — the bundled MCP
+server uploads each oversized page's rasterized image, polls until the upload reaches `ACTIVE`, runs
+OCR against the uploaded file, then deletes it, all inside a single `gemini_ocr` call. This is
+transparent to the skill: no special handling needed on the happy path.
+
+**On an `ocr_failed` error whose message mentions "Files API"** (the upload failed, the uploaded file
+was rejected/`FAILED`, or the upload didn't reach `ACTIVE` within the poll timeout): the Files API path
+itself failed for this batch. Retry **once** with the same `page_range` narrowed to a single page at a
+time (call `gemini_ocr` per individual page instead of the default 6-page-per-call batch) — this fixes
+the common case where a *batch* of pages together crossed 20MB even though no single page does, and
+gives a single problematic page's upload a clean retry in isolation. If a **single page alone** still
+fails the same way, do not keep retrying: report to the user plainly that this page's Files API upload
+did not succeed (include the error message) — skip that page, note it in the output file's Notes
+section, and continue with the rest of the document.
 
 **On any other structured error** (`no_credentials`, `api_error`, `transient`, `validation`,
 `ocr_failed` for other reasons): stop processing *this* document, report the error's `message` field
@@ -172,7 +177,7 @@ Write `ocr-output/<basename>.ocr.md`:
 ## Notes
 
 - <any page with confidence: "low" or a non-empty `notes` field — page number + note, verbatim>
-- <any skipped page from the 20MB workaround above, with the reason>
+- <any skipped page from a persistent Files API failure above, with the reason>
 ```
 
 Every page's `notes` and `confidence` fields carry over into this Notes section when non-trivial —
