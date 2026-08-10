@@ -4,9 +4,22 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { mapFinishReasonError, decideUploadPath, INLINE_SIZE_LIMIT_BYTES } from '../src/gemini-client-ocr-helpers.js';
+import {
+  mapFinishReasonError,
+  decideUploadPath,
+  uploadViaFilesApi,
+  INLINE_SIZE_LIMIT_BYTES,
+  type FilesApiFileHandle,
+  type FilesApiUploader,
+} from '../src/gemini-client-ocr-helpers.js';
 import { runGeminiOcr } from '../src/tools/gemini_ocr.js';
-import type { GeminiOcrDeps, DetectResult, RasterizeResult, OcrGenerateResult } from '../src/tools/gemini_ocr_types.js';
+import type {
+  GeminiOcrDeps,
+  DetectResult,
+  RasterizeResult,
+  OcrGenerateResult,
+  OcrUploadedFileHandle,
+} from '../src/tools/gemini_ocr_types.js';
 // isStructuredError lives in bundle.ts in the real gemini-server (not
 // errors.ts, unlike the staging build) — real errors.ts only gained the
 // `ocr_failed` code + `ocrFailed()` factory during integration.
@@ -80,6 +93,125 @@ describe('decideUploadPath', () => {
 });
 
 // ---------------------------------------------------------------------------
+// uploadViaFilesApi: upload + poll-until-ACTIVE, unit-tested directly against
+// a fake FilesApiUploader (no real @google/genai calls).
+// ---------------------------------------------------------------------------
+
+function makeHandle(overrides: Partial<FilesApiFileHandle> = {}): FilesApiFileHandle {
+  return { name: 'files/abc', uri: 'https://files.example/abc', mimeType: 'image/png', state: 'ACTIVE', ...overrides };
+}
+
+describe('uploadViaFilesApi', () => {
+  test('immediately ACTIVE resolves without polling', async () => {
+    let statusCalls = 0;
+    const filesApi: FilesApiUploader = {
+      upload: async () => makeHandle({ state: 'ACTIVE' }),
+      getStatus: async () => {
+        statusCalls++;
+        return makeHandle({ state: 'ACTIVE' });
+      },
+    };
+    const ref = await uploadViaFilesApi('/tmp/page.png', 'image/png', filesApi, {
+      pollIntervalMs: 1,
+      timeoutMs: 1000,
+    });
+    assert.equal(ref.uri, 'https://files.example/abc');
+    assert.equal(ref.name, 'files/abc');
+    assert.equal(statusCalls, 0);
+  });
+
+  test('PROCESSING -> PROCESSING -> ACTIVE poll loop resolves correctly', async () => {
+    let statusCalls = 0;
+    const filesApi: FilesApiUploader = {
+      upload: async () => makeHandle({ state: 'PROCESSING' }),
+      getStatus: async () => {
+        statusCalls++;
+        return statusCalls < 2 ? makeHandle({ state: 'PROCESSING' }) : makeHandle({ state: 'ACTIVE' });
+      },
+    };
+    const ref = await uploadViaFilesApi('/tmp/page.png', 'image/png', filesApi, {
+      pollIntervalMs: 1,
+      timeoutMs: 1000,
+    });
+    assert.equal(ref.uri, 'https://files.example/abc');
+    assert.equal(statusCalls, 2);
+  });
+
+  test('FAILED state during polling produces an explicit ocr_failed error', async () => {
+    const filesApi: FilesApiUploader = {
+      upload: async () => makeHandle({ state: 'PROCESSING' }),
+      getStatus: async () => makeHandle({ state: 'FAILED', errorMessage: 'corrupt image' }),
+    };
+    await assert.rejects(
+      () => uploadViaFilesApi('/tmp/page.png', 'image/png', filesApi, { pollIntervalMs: 1, timeoutMs: 1000 }),
+      (err: unknown) => {
+        assert.ok(isStructuredError(err));
+        const structured = err as { code: string; message: string };
+        assert.equal(structured.code, 'ocr_failed');
+        assert.match(structured.message, /corrupt image/);
+        return true;
+      },
+    );
+  });
+
+  test('poll timeout produces an explicit ocr_failed error without waiting real minutes', async () => {
+    const filesApi: FilesApiUploader = {
+      upload: async () => makeHandle({ state: 'PROCESSING' }),
+      getStatus: async () => makeHandle({ state: 'PROCESSING' }), // never resolves
+    };
+    const start = Date.now();
+    await assert.rejects(
+      () => uploadViaFilesApi('/tmp/page.png', 'image/png', filesApi, { pollIntervalMs: 5, timeoutMs: 20 }),
+      (err: unknown) => {
+        assert.ok(isStructuredError(err));
+        const structured = err as { code: string; message: string };
+        assert.equal(structured.code, 'ocr_failed');
+        assert.match(structured.message, /PROCESSING/);
+        assert.match(structured.message, /did not reach ACTIVE/);
+        return true;
+      },
+    );
+    // Sanity check this test itself stayed fast (short configurable timeout,
+    // not the real 120s production default).
+    assert.ok(Date.now() - start < 2000);
+  });
+
+  test('an unexpected terminal state (neither ACTIVE nor FAILED) is also an explicit error', async () => {
+    const filesApi: FilesApiUploader = {
+      upload: async () => makeHandle({ state: 'STATE_UNSPECIFIED' }),
+      getStatus: async () => makeHandle({ state: 'STATE_UNSPECIFIED' }),
+    };
+    await assert.rejects(
+      () => uploadViaFilesApi('/tmp/page.png', 'image/png', filesApi, { pollIntervalMs: 1, timeoutMs: 1000 }),
+      (err: unknown) => {
+        assert.ok(isStructuredError(err));
+        const structured = err as { code: string; message: string };
+        assert.equal(structured.code, 'ocr_failed');
+        assert.match(structured.message, /STATE_UNSPECIFIED/);
+        return true;
+      },
+    );
+  });
+
+  test('an upload failure that is already a StructuredError (e.g. no_credentials) passes through unchanged', async () => {
+    const noCreds = { code: 'no_credentials', message: 'No Gemini API key found.' };
+    const filesApi: FilesApiUploader = {
+      upload: async () => {
+        throw noCreds;
+      },
+      getStatus: async () => makeHandle({ state: 'ACTIVE' }),
+    };
+    await assert.rejects(
+      () => uploadViaFilesApi('/tmp/page.png', 'image/png', filesApi, { pollIntervalMs: 1, timeoutMs: 1000 }),
+      (err: unknown) => {
+        assert.deepEqual(err, noCreds);
+        return true;
+      },
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
 // runGeminiOcr integration (all deps mocked — no network, no real subprocess)
 // ---------------------------------------------------------------------------
 
@@ -119,6 +251,11 @@ function makeDeps(overrides: Partial<GeminiOcrDeps> = {}): GeminiOcrDeps {
       cleanedUp.push(dir);
     },
     fileExists: async () => true,
+    uploadFile: async (filePath) =>
+      ({ name: `files/${filePath}`, uri: `https://files.example/${filePath}`, mimeType: 'image/png', state: 'ACTIVE' }) satisfies OcrUploadedFileHandle,
+    getUploadedFileStatus: async (name) =>
+      ({ name, uri: `https://files.example/${name}`, mimeType: 'image/png', state: 'ACTIVE' }) satisfies OcrUploadedFileHandle,
+    deleteUploadedFile: async () => {},
     ...overrides,
   };
 }
@@ -189,19 +326,96 @@ describe('runGeminiOcr', () => {
     );
   });
 
-  test('oversized batch payload routes to Files-API-not-wired error, not a broken inline call', async () => {
+  test('oversized batch payload routes through the Files API (upload+poll), not a broken inline call', async () => {
+    const uploadedPaths: string[] = [];
+    const generateCalls: Array<{ images: Array<{ data?: string; fileUri?: string }> }> = [];
     const deps = makeDeps({
       readFileBase64: async () => ({ data: 'x'.repeat(100), rawBytes: 15_000_000 }), // 2 pages * 15MB raw > 20MB base64
+      uploadFile: async (filePath) => {
+        uploadedPaths.push(filePath);
+        return { name: `files/${filePath}`, uri: `https://files.example/${filePath}`, mimeType: 'image/png', state: 'ACTIVE' };
+      },
+      generate: async (args) => {
+        generateCalls.push(args);
+        return {
+          text: JSON.stringify([
+            { page_number: 2, text: 'scanned page two', is_born_digital: false, confidence: 'high', notes: '' },
+            { page_number: 3, text: 'scanned page three', is_born_digital: false, confidence: 'high', notes: '' },
+          ]),
+          finishReason: 'STOP',
+        } satisfies OcrGenerateResult;
+      },
+    });
+    const result = await runGeminiOcr({ document_path: '/fake/doc.pdf', target_language: 'en' }, deps);
+    assert.equal(result.pages.length, 3);
+    // Both rasterized pages went through the Files API, not the inline path.
+    assert.deepEqual(uploadedPaths, ['/tmp/fake-gemini-ocr/page-2.png', '/tmp/fake-gemini-ocr/page-3.png']);
+    assert.equal(generateCalls.length, 1);
+    assert.ok(generateCalls[0].images.every((img) => img.fileUri && !img.data));
+  });
+
+  test('routing regression: a small chunk still uses the inline path, not the Files API', async () => {
+    let uploadCalled = false;
+    const deps = makeDeps({
+      readFileBase64: async () => ({ data: 'ZmFrZQ==', rawBytes: 1000 }), // well under the 20MB threshold
+      uploadFile: async (filePath) => {
+        uploadCalled = true;
+        return { name: `files/${filePath}`, uri: `https://files.example/${filePath}`, mimeType: 'image/png', state: 'ACTIVE' };
+      },
+    });
+    const result = await runGeminiOcr({ document_path: '/fake/doc.pdf', target_language: 'en' }, deps);
+    assert.equal(result.pages.length, 3);
+    assert.equal(uploadCalled, false);
+  });
+
+  test('Files API cleanup: uploaded files are deleted after a successful OCR run', async () => {
+    const deletedNames: string[] = [];
+    const deps = makeDeps({
+      readFileBase64: async () => ({ data: 'x'.repeat(100), rawBytes: 15_000_000 }),
+      deleteUploadedFile: async (name) => {
+        deletedNames.push(name);
+      },
+    });
+    await runGeminiOcr({ document_path: '/fake/doc.pdf', target_language: 'en' }, deps);
+    assert.deepEqual(deletedNames, [
+      'files//tmp/fake-gemini-ocr/page-2.png',
+      'files//tmp/fake-gemini-ocr/page-3.png',
+    ]);
+  });
+
+  test('Files API cleanup: uploaded files are deleted even when the downstream Gemini call fails', async () => {
+    const deletedNames: string[] = [];
+    const deps = makeDeps({
+      readFileBase64: async () => ({ data: 'x'.repeat(100), rawBytes: 15_000_000 }),
+      deleteUploadedFile: async (name) => {
+        deletedNames.push(name);
+      },
+      generate: async () => {
+        throw new Error('simulated network failure after upload succeeded');
+      },
+    });
+    await assert.rejects(() =>
+      runGeminiOcr({ document_path: '/fake/doc.pdf', target_language: 'en' }, deps),
+    );
+    assert.deepEqual(deletedNames, [
+      'files//tmp/fake-gemini-ocr/page-2.png',
+      'files//tmp/fake-gemini-ocr/page-3.png',
+    ]);
+  });
+
+  test('a delete failure during cleanup does not mask the real error', async () => {
+    const deps = makeDeps({
+      readFileBase64: async () => ({ data: 'x'.repeat(100), rawBytes: 15_000_000 }),
+      deleteUploadedFile: async () => {
+        throw new Error('delete also failed');
+      },
+      generate: async () => {
+        throw new Error('the real, original failure');
+      },
     });
     await assert.rejects(
       () => runGeminiOcr({ document_path: '/fake/doc.pdf', target_language: 'en' }, deps),
-      (err: unknown) => {
-        assert.ok(isStructuredError(err));
-        const structured = err as { code: string; message: string };
-        assert.equal(structured.code, 'ocr_failed');
-        assert.match(structured.message, /20MB|Files API/);
-        return true;
-      },
+      /the real, original failure/,
     );
   });
 
