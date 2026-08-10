@@ -2,6 +2,28 @@
 
 All notable changes to the academic-writer plugin are documented here.
 
+## [Unreleased]
+
+### Added
+
+- **Gemini File API upload for OCR inputs over 20MB.** `uploadViaFilesApi()` was a
+  named stub with a `TODO`; documents above the inline limit could only be handled
+  by splitting them and OCR'ing page by page — more API calls, more wall-clock, and
+  no cross-page context. Large files now upload once and are referenced by URI via
+  a `fileData` part.
+
+  Uses `@google/genai` 1.52.0's own `files.upload` / `files.get` / `files.delete`
+  primitives — no hand-rolled HTTP was needed. Polls `PROCESSING → ACTIVE` at 2s
+  intervals with a 2-minute ceiling, and raises on `FAILED` rather than hanging.
+  The uploaded file is deleted in a `finally` block so cleanup runs on every error
+  branch as well as on success, and a failed delete never masks the real OCR error.
+
+  The per-page split is retained as the error-path fallback rather than removed.
+  Sequential-only OCR, `thinking_budget=0` / `temperature=0` / `top_k=1`, and
+  image-part-before-text are all preserved.
+
+  Gemini server suite 54 → 64 passing.
+
 ## [0.6.1] — 2026-08-09
 
 ### Fixed
