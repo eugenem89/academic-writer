@@ -62,3 +62,8 @@ plugins/academic-writer/mcp/gemini-server/node_modules/
 
 # Local API key fallback (per gemini integration spec)
 .academic-helper/secrets.json
+
+# EndNote consolidation working directories (contain copies of source libraries)
+tools/endnote-consolidate/work/
+tools/endnote-consolidate/config.json
+tools/endnote-consolidate/tests/fixture-libraries/

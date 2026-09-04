@@ -1,0 +1,27 @@
+{
+  "_comment": "Copy to config.json and pass with --config. Everything is optional; omitted keys keep the defaults in lib/match.py.",
+
+  "thresholds": {
+    "auto_merge": 0.92,
+    "review_low": 0.72,
+    "year_slack": 1,
+    "max_block": 400
+  },
+
+  "_thresholds_help": {
+    "auto_merge": "Pairs at or above this, with no blocker, are merged without anyone looking. Raise to 0.95 for a first cautious pass; lower to 0.88 once you trust the review queue.",
+    "review_low": "Pairs between review_low and auto_merge land in review-queue.csv. Lower it to catch more possible duplicates at the cost of a longer queue.",
+    "year_slack": "Years this far apart still count as the same year (catalogues disagree about copyright vs printing dates).",
+    "max_block": "Blocking buckets larger than this are skipped as junk (e.g. 5000 records with no title). Skipped buckets are listed in cluster-report.json."
+  },
+
+  "weights": {
+    "title": 0.50,
+    "authors": 0.25,
+    "year": 0.10,
+    "container": 0.10,
+    "detail": 0.05
+  },
+
+  "_weights_help": "Weights are renormalised over whichever components have evidence on both sides, so a book is never penalised for having no volume or issue."
+}
